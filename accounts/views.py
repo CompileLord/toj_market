@@ -1,0 +1,140 @@
+from rest_framework import status, views, permissions
+from rest_framework.response import Response
+from django.core.mail import send_mail
+from django.conf import settings
+from django.contrib.auth import login
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
+from drf_yasg.utils import swagger_auto_schema
+from .models import VerificationCode, get_expiry_time
+from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer
+import random
+
+User = get_user_model
+
+def get_tokens_by_user(user):
+    refresh = RefreshToken.for_user(user)
+    
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token)
+    }
+
+
+class SendCodeView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+    @swagger_auto_schema(
+            request_body=SendCodeSerializer,
+            operation_description='Sending code to gmail',
+            tags=['Authentication'],
+    )
+    def post(self, request):
+        serializer = SendCodeSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            code = str(random.randint(100000, 999999))
+            obj, created = VerificationCode.objects.update_or_create(
+                email=email,
+                defaults={'code': code}
+            )
+            if not created:
+                obj.refresh_code()
+                code = obj.code
+            try:
+                send_mail(
+                    'Your Verification Code',
+                    f'Your verification code is: {code}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                return Response({"error": "Failed to send email."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return Response({"message": "Verification code sent successfully."}, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class RegisterView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+    @swagger_auto_schema(
+            request_body=RegisterSerializer,
+            operation_description='Register user by email and password after that front should save the password and email',
+            tags=['Authentication'],
+    )
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            tokens = get_tokens_by_user(user)
+            return Response({
+                "message": "User registered successful",
+                **tokens
+            }, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LoginView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+            request_body=LoginSerializer,
+            operation_description='Login user view by giving email and password',
+            tags=['Authentication'],
+    )
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data['user']
+            tokens = get_tokens_by_user(user)
+            return Response({
+                'message': 'Login successful',
+                **tokens
+            }, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetRequestView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        request_body=ResetPasswordEmailSerializer,
+        tags=['Authentication'],
+    )
+
+    def post(self, request):
+        serializer = ResetPasswordEmailSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            code = str(random.randint(100000, 999999))
+            VerificationCode.objects.update_or_create(
+                email=email,
+                defaults={'code': code, 'expires_at': get_expiry_time()}
+            )
+
+            send_mail(
+                'Reset password',
+                f'You code for reset your password is {code}',
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+            )
+
+            return Response({'message': "Reser code sended successfuly"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PasswordResetConfirmView(views.APIView):
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(request_body=ResetPasswordConfirmSerializer, tags=['Authentication'],)
+    def post(self, request):
+        serializer = ResetPasswordConfirmSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            new_password = serializer.validated_data['new_password']            
+            user = User.objects.get(email=email)
+            user.set_password(new_password) 
+            user.save()
+            VerificationCode.objects.filter(email=email).delete()            
+            return Response({"message": "Password changed successfuly."}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
