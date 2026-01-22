@@ -28,7 +28,9 @@ class Category(models.Model):
 class Shop(models.Model):
     seller = models.OneToOneField(User, on_delete=models.CASCADE)
     bio = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     avatar = models.ImageField(upload_to='shop_avatars/')
+    review_count = models.IntegerField(default=0)
     is_deleted = models.BooleanField(default=False)
 
     objects = IsDeleteManager()
@@ -46,6 +48,7 @@ class Product(models.Model):
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
     is_deleted = models.BooleanField(default=False)
+    views_count = models.IntegerField(default=0)
 
     objects = IsDeleteManager()
     def delete(self):
@@ -56,6 +59,10 @@ class ImageProduct(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='product_additional_images/')
     is_main_image = models.BooleanField(default=False)
+    def save(self, *args, **kwargs):
+        if self.is_main_image: 
+            ImageProduct.objects.filter(product=self.product).update(is_main_image=False)
+        super().save(*args, **kwargs)
 
 
 class CommentProduct(models.Model):
@@ -94,6 +101,7 @@ class Order(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='orders')
     count = models.IntegerField(default=1)
     total = models.DecimalField(max_digits=20, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class ReviewProduct(models.Model):
