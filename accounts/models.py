@@ -32,15 +32,28 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractUser):
+    class RoleChoices(models.TextChoices):
+        ADMIN = 'AD', 'Admin'
+        BAYER = 'BY', 'Bayer'
+        SELLER = 'SL', 'Seller'
+
+
+
     username = None
     email = models.EmailField(unique=True)
-    telegram_id = models.CharField(max_length=100, null=True, blank=True)
+    telegram_id = models.BigIntegerField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
+    role = models.CharField(
+        max_length=2,
+        choices=RoleChoices.choices,
+        default=RoleChoices.BAYER
+    )
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
     objects = CustomUserManager()
+
 
     def __str__(self):
         return self.email

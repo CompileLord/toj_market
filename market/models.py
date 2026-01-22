@@ -1,0 +1,110 @@
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class IsDeleteManager(models.Manager):
+    def get_queryset(self, *args, **kwargs):
+        return super().get_queryset(*args, **kwargs).filter(
+            is_deleted = False
+        )
+
+
+
+
+
+class Category(models.Model):
+    title = models.CharField(max_length=100)
+    avatar = models.ImageField(upload_to='category_avatars/')
+    is_deleted = models.BooleanField(default=False)
+
+    objects = IsDeleteManager()
+    def delete(self):
+        self.is_deleted = self.is_deleted = True
+        self.save()
+
+
+class Shop(models.Model):
+    seller = models.OneToOneField(User, on_delete=models.CASCADE)
+    bio = models.TextField(null=True, blank=True)
+    avatar = models.ImageField(upload_to='shop_avatars/')
+    is_deleted = models.BooleanField(default=False)
+
+    objects = IsDeleteManager()
+    def delete(self):
+        self.is_deleted = self.is_deleted = True
+
+
+class Product(models.Model):
+    title = models.CharField(max_length=100)
+    description = models.TextField(null=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.IntegerField(default=1)
+    discount = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
+    is_deleted = models.BooleanField(default=False)
+
+    objects = IsDeleteManager()
+    def delete(self):
+        self.is_deleted = self.is_deleted = True
+
+
+class ImageProduct(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='product_additional_images/')
+    is_main_image = models.BooleanField(default=False)
+
+
+class CommentProduct(models.Model):
+    text = models.TextField()
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+
+
+class CrownProduct(models.Model):
+    class CrownChoices(models.IntegerChoices):
+        ONE = 1, 'One crown'
+        TWO = 2, 'Two crowns'
+        THREE = 3, 'Three crowns'
+        FOUR = 4, 'Four crowns'
+        FIVE = 5, 'Five crowns'
+    crowns = models.IntegerField(choices=CrownChoices, default=CrownChoices.ONE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='product_crowns')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+
+class HistorySearch(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='history')
+    text = models.CharField(max_length=255)
+    datetime = models.DateTimeField(auto_now_add=True)
+
+
+class Cart(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE,related_name='cart_items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    count = models.IntegerField(default=1)
+    totall = models.DecimalField(max_digits=20, decimal_places=2)
+
+
+class Order(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='order_items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='orders')
+    count = models.IntegerField(default=1)
+    total = models.DecimalField(max_digits=20, decimal_places=2)
+
+
+class ReviewProduct(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='product_reviews')
+
+
+class ReviewShop(models.Model):
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='shop_reviews')
+
+
+
+

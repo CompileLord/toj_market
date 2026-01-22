@@ -8,18 +8,17 @@ from django.contrib.auth import get_user_model
 from drf_yasg.utils import swagger_auto_schema
 from .models import VerificationCode, get_expiry_time
 from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer
+from .helpers import send_verification_email, send_welcome_message
 import random
 
 User = get_user_model
 
 def get_tokens_by_user(user):
-    refresh = RefreshToken.for_user(user)
-    
+    refresh = RefreshToken.for_user(user)    
     return {
         'refresh': str(refresh),
         'access': str(refresh.access_token)
     }
-
 
 class SendCodeView(views.APIView):
     permission_classes = [permissions.AllowAny]
@@ -41,13 +40,7 @@ class SendCodeView(views.APIView):
                 obj.refresh_code()
                 code = obj.code
             try:
-                send_mail(
-                    'Your Verification Code',
-                    f'Your verification code is: {code}',
-                    settings.DEFAULT_FROM_EMAIL,
-                    [email],
-                    fail_silently=False,
-                )
+                send_verification_email(email=email, code=code)
             except Exception as e:
                 return Response({"error": "Failed to send email."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -67,6 +60,14 @@ class RegisterView(views.APIView):
         if serializer.is_valid():
             user = serializer.save()
             tokens = get_tokens_by_user(user)
+            try:
+                first_name = request.data.get('first_name')
+                last_name = request.data.get('last_name')
+                email = request.data.get('email')
+                full_name = f'{first_name} {last_name}'
+                send_welcome_message(email=email, full_name=full_name)
+            except Exception:
+                pass
             return Response({
                 "message": "User registered successful",
                 **tokens
