@@ -95,3 +95,4 @@ class ResetPasswordConfirmSerializer(serializers.Serializer):
         except VerificationCode.DoesNotExist:
             raise serializers.ValidationError('Email or code is incorrect')
         return attrs
+

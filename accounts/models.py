@@ -44,6 +44,7 @@ class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
     telegram_id = models.BigIntegerField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
+    telegram_token = models.CharField(max_length=255, null=True, blank=True)
     role = models.CharField(
         max_length=2,
         choices=RoleChoices.choices,

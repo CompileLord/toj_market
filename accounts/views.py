@@ -4,12 +4,15 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth import login
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from drf_yasg.utils import swagger_auto_schema
 from .models import VerificationCode, get_expiry_time
 from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer
 from .helpers import send_verification_email, send_welcome_message
 import random
+import secrets
+
 
 User = get_user_model
 
@@ -138,4 +141,18 @@ class PasswordResetConfirmView(views.APIView):
             VerificationCode.objects.filter(email=email).delete()            
             return Response({"message": "Password changed successfuly."}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class TelegrammLinkView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Authentication'],)
+
+    def get(self, request):
+        user = request.user
+        token = secrets.token_urlsafe(16)
+        user.telegram_token = token
+        user.save()
+        bot_username = settings.BOT_USERNAME
+        deep_link = f"https://t.me/{bot_username}?start={token}"
+        return Response({'link': deep_link}, status=status.HTTP_200_OK)
+
 

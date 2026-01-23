@@ -183,3 +183,6 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'tojmarket.suport@gmail.com'
 EMAIL_HOST_PASSWORD = 'qrpi pvjx dlwr vhaw'
 
+
+BOT_USERNAME = os.getenv('BOT_USERNAME')
+

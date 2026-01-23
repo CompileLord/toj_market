@@ -29,6 +29,17 @@ class ShopSerializer(serializers.ModelSerializer):
                   'total_products', 'total_orders', 'review_count')
         read_only_fields = ('id', 'seller_full_name', 'review_count')
     
+    def validate(self, attrs):
+        user = self.context['request'].user
+        if Shop.objects.filter(seller=user).exists():
+            raise serializers.ValidationError('You already have a shop')
+        if user.role != 'SL':
+            raise serializers.ValidationError('You must be a seller to create a shop')
+        if user.telegram_id is None:
+            raise serializers.ValidationError('You must set your telegram id')
+        return attrs
+
+
     def get_seller_full_name(self, obj):
         return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
     
@@ -42,15 +53,19 @@ class ImageProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageProduct
         fields = ('id', 'product', 'image', 'is_main_image')
+        read_only_fields = ('id',)
 
 class ProductSerializer(serializers.ModelSerializer):
     avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
     main_image = serializers.SerializerMethodField()
+
     class Meta:
         model = Product
         fields = ('id', 'title', 'description', 'price', 'quantity', 'discount', 
-                  'created_at', 'shop', 'category', 'views_count', 'avg_crowns', 'main_image')
-        read_only_fields = ('id', 'shop', 'views_count', 'main_image', 'created_at', 'avg_crowns')
+                   'shop', 'category', 'views_count', 'avg_crowns', 'main_image')
+        read_only_fields = ('id', 'shop', 'views_count', 'main_image', 'avg_crowns')
+        extra_kwargs = {'description': {'write_only': True}, 'quantity': {'write_only': True}}
+
     
     def get_main_image(self, obj):
         image = obj.images.filter(is_main_image=True).first()
@@ -108,7 +123,7 @@ class CartSerializer(serializers.ModelSerializer):
         product = attrs['product']
         count = attrs['count']
         if product.quantity < count:
-            return serializers.ValidationError('The count can not be more then quantity of the product')
+            raise serializers.ValidationError('The count can not be more then quantity of the product')
         return attrs
 
     def create(self, validated_data):
@@ -160,8 +175,8 @@ class CrownProductSerializer(serializers.ModelSerializer):
 class ReviewProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReviewProduct
-        fields = ('id', 'products', 'user')
-        read_only_fields = ('id','products', 'user')
+        fields = ('id', 'product', 'user')
+        read_only_fields = ('id','product', 'user')
 
     def create(self, validated_data):
         user = self.context['request'].user
