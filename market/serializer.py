@@ -21,12 +21,13 @@ class ShopSerializer(serializers.ModelSerializer):
     avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
     total_products = serializers.IntegerField(read_only=True)
     total_orders = serializers.IntegerField(read_only=True)
+    avatar = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Shop
-        fields = ('id', 'seller_full_name', 'bio', 'avatar', 'avg_crowns', 
-                  'total_views', 'total_products', 'review_count')
-        read_only_fields = ('id', 'seller_full_name')
+        fields = ('id', 'seller_full_name','title', 'bio', 'avatar', 'avg_crowns', 
+                  'total_products', 'total_orders', 'review_count')
+        read_only_fields = ('id', 'seller_full_name', 'review_count')
     
     def get_seller_full_name(self, obj):
         return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
@@ -44,13 +45,20 @@ class ImageProductSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
-    
+    main_image = serializers.SerializerMethodField()
     class Meta:
         model = Product
         fields = ('id', 'title', 'description', 'price', 'quantity', 'discount', 
-                  'created_at', 'shop', 'category', 'views_count', 'avg_crowns')
-        read_only_fields = ('id', 'shop', 'views_count', 'created_at', 'avg_crowns')
+                  'created_at', 'shop', 'category', 'views_count', 'avg_crowns', 'main_image')
+        read_only_fields = ('id', 'shop', 'views_count', 'main_image', 'created_at', 'avg_crowns')
     
+    def get_main_image(self, obj):
+        image = obj.images.filter(is_main_image=True).first()
+        if image:
+            return image.image.url
+        return None
+
+
     def create(self, validated_data):
         user = self.context['request'].user
         try:
@@ -187,7 +195,7 @@ class ReviewShopSerializer(serializers.ModelSerializer):
         if created:
             shop.review_count = F('review_count') + 1
             shop.save()
-            shop.regresh_from_db
+            shop.refresh_from_db
         
         return review
     

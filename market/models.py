@@ -28,6 +28,7 @@ class Category(models.Model):
 class Shop(models.Model):
     seller = models.OneToOneField(User, on_delete=models.CASCADE)
     bio = models.TextField(null=True, blank=True)
+    title = models.CharField(max_length=100, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     avatar = models.ImageField(upload_to='shop_avatars/')
     review_count = models.IntegerField(default=0)
@@ -46,14 +47,15 @@ class Product(models.Model):
     quantity = models.IntegerField(default=1)
     discount = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    shop = models.ForeignKey(Shop, on_delete=models.CASCADE)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products')
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name='products')
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='category_products')
     is_deleted = models.BooleanField(default=False)
     views_count = models.IntegerField(default=0)
 
     objects = IsDeleteManager()
     def delete(self):
-        self.is_deleted = self.is_deleted = True
+        self.is_deleted = True
+        self.save()
 
 
 class ImageProduct(models.Model):
