@@ -36,6 +36,7 @@ class CustomUser(AbstractUser):
         ADMIN = 'AD', 'Admin'
         BAYER = 'BY', 'Bayer'
         SELLER = 'SL', 'Seller'
+    avatar = models.ImageField(upload_to='users_avatars/', default='users_avatars/placeholder.png')
 
 
 

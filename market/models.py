@@ -21,7 +21,7 @@ class Category(models.Model):
 
     objects = IsDeleteManager()
     def delete(self):
-        self.is_deleted = self.is_deleted = True
+        self.is_deleted = True
         self.save()
 
 
@@ -35,7 +35,8 @@ class Shop(models.Model):
 
     objects = IsDeleteManager()
     def delete(self):
-        self.is_deleted = self.is_deleted = True
+        self.is_deleted = True
+        self.save()
 
 
 class Product(models.Model):
