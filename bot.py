@@ -30,7 +30,7 @@ class AuthMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         tg_id = event.from_user.id
         user = await sync_to_async(
-            User.objects.filter(telegram_id=tg_id).select_related('shop').first()
+            User.objects.filter(telegram_id=tg_id).select_related('shop').first
         )()
         data['django_user'] = user
         return await handler(event, data)
@@ -47,9 +47,9 @@ class SellerBot:
     def _register_handlers(self):
         self.dp.message.register(self.start_handler, CommandStart(deep_link=True))
         self.dp.message.register(self.help_command_handler, Command('/help'))
-        self.dp.message.register(self.add_product_handler, Command('/add_product'))
-        self.dp.message.register(self.view_products_handler, Command('/view_products'))
-        self.dp.message.register(self.view_categories_handler, Command('/view_categories'))
+        # self.dp.message.register(self.add_product_handler, Command('/add_product'))
+        # self.dp.message.register(self.view_products_handler, Command('/view_products'))
+        # self.dp.message.register(self.view_categories_handler, Command('/view_categories'))
 
 
 

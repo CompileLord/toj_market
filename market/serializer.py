@@ -33,8 +33,6 @@ class ShopSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         if Shop.objects.filter(seller=user).exists():
             raise serializers.ValidationError('You already have a shop')
-        if user.role != 'SL':
-            raise serializers.ValidationError('You must be a seller to create a shop')
         if user.telegram_id is None:
             raise serializers.ValidationError('You must set your telegram id')
         return attrs
@@ -50,6 +48,8 @@ class ShopSerializer(serializers.ModelSerializer):
         return Shop.objects.create(seller=user, **validated_data)
 
 class ImageProductSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = ImageProduct
         fields = ('id', 'product', 'image', 'is_main_image')
@@ -124,6 +124,9 @@ class CartSerializer(serializers.ModelSerializer):
         count = attrs['count']
         if product.quantity < count:
             raise serializers.ValidationError('The count can not be more then quantity of the product')
+        cart = Cart.objects.filter(id=product, user=attrs['user'])
+        if cart.exists():
+            raise serializers.ValidationError('You already have this product in your cart')
         return attrs
 
     def create(self, validated_data):

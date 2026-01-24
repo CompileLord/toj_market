@@ -1,14 +1,11 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 User = get_user_model()
 
 
-class IsDeleteManager(models.Manager):
-    def get_queryset(self, *args, **kwargs):
-        return super().get_queryset(*args, **kwargs).filter(
-            is_deleted = False
-        )
+
 
 
 
@@ -19,7 +16,6 @@ class Category(models.Model):
     avatar = models.ImageField(upload_to='category_avatars/')
     is_deleted = models.BooleanField(default=False)
 
-    objects = IsDeleteManager()
     def delete(self):
         self.is_deleted = True
         self.save()
@@ -34,10 +30,6 @@ class Shop(models.Model):
     review_count = models.IntegerField(default=0)
     is_deleted = models.BooleanField(default=False)
 
-    objects = IsDeleteManager()
-    def delete(self):
-        self.is_deleted = True
-        self.save()
 
 
 class Product(models.Model):
@@ -52,10 +44,6 @@ class Product(models.Model):
     is_deleted = models.BooleanField(default=False)
     views_count = models.IntegerField(default=0)
 
-    objects = IsDeleteManager()
-    def delete(self):
-        self.is_deleted = True
-        self.save()
 
 
 class ImageProduct(models.Model):
@@ -96,15 +84,31 @@ class Cart(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE,related_name='cart_items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     count = models.IntegerField(default=1)
-    totall = models.DecimalField(max_digits=20, decimal_places=2)
+    class Meta:
+        unique_together = ('user', 'product')
+
+    @property
+    def totall(self):
+        return self.product.price * self.count
+
 
 
 class Order(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='order_items')
+    class Status(models.TextChoices):
+        PENDING = 'PN', 'Pending'
+        PAID = 'PD', 'Paid'
+        SHIPPED = 'SH', 'Shipped'
+        DELIVERED = 'DL', 'Delivered'
+        CANCELLED = 'CN', 'Cancelled'
+    status = models.CharField(max_length=2, choices=Status.choices, default=Status.PENDING)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='orders')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='order_items')
     count = models.IntegerField(default=1)
-    total = models.DecimalField(max_digits=20, decimal_places=2)
+    price_at_purchase = models.DecimalField(max_digits=20, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ('user', 'product')
+
 
 
 class ReviewProduct(models.Model):

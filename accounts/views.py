@@ -27,8 +27,9 @@ class SendCodeView(views.APIView):
     permission_classes = [permissions.AllowAny]
     @swagger_auto_schema(
             request_body=SendCodeSerializer,
-            operation_description='Sending code to gmail',
+            operation_description='Send verification code to email',
             tags=['Authentication'],
+            consumes=['multipart/form-data']
     )
     def post(self, request):
         serializer = SendCodeSerializer(data=request.data)
@@ -55,8 +56,9 @@ class RegisterView(views.APIView):
     permission_classes = [permissions.AllowAny]
     @swagger_auto_schema(
             request_body=RegisterSerializer,
-            operation_description='Register user by email and password after that front should save the password and email',
+            operation_description='Register user with email and password',
             tags=['Authentication'],
+            consumes=['multipart/form-data']
     )
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -83,8 +85,9 @@ class LoginView(views.APIView):
 
     @swagger_auto_schema(
             request_body=LoginSerializer,
-            operation_description='Login user view by giving email and password',
+            operation_description='Login user with email and password',
             tags=['Authentication'],
+            consumes=['multipart/form-data']
     )
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -103,7 +106,9 @@ class PasswordResetRequestView(views.APIView):
 
     @swagger_auto_schema(
         request_body=ResetPasswordEmailSerializer,
+        operation_description='Send password reset code to email',
         tags=['Authentication'],
+        consumes=['multipart/form-data']
     )
 
     def post(self, request):
@@ -129,7 +134,12 @@ class PasswordResetRequestView(views.APIView):
 class PasswordResetConfirmView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
-    @swagger_auto_schema(request_body=ResetPasswordConfirmSerializer, tags=['Authentication'],)
+    @swagger_auto_schema(
+        request_body=ResetPasswordConfirmSerializer,
+        operation_description='Confirm password reset with code',
+        tags=['Authentication'],
+        consumes=['multipart/form-data']
+    )
     def post(self, request):
         serializer = ResetPasswordConfirmSerializer(data=request.data)
         if serializer.is_valid():
@@ -144,7 +154,11 @@ class PasswordResetConfirmView(views.APIView):
 
 class TelegrammLinkView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
-    @swagger_auto_schema(tags=['Authentication'],)
+    @swagger_auto_schema(
+        operation_description='Get Telegram bot deep link for linking account',
+        tags=['Authentication'],
+        consumes=['multipart/form-data']
+    )
 
     def get(self, request):
         user = request.user
