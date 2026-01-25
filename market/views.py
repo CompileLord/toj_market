@@ -11,10 +11,12 @@ from django.db.models.functions import Coalesce
 from django.core.cache import cache
 
 from .permissions import IsAdmin, IsOwnerProduct, IsOwnerShop, IsOwnerImageProduct, IsSeller
-from .models import (Category, Shop, Product, ReviewProduct, ImageProduct)
+from .models import (Category, Shop, Product, ReviewProduct, ImageProduct, CommentProduct,
+                     CrownProduct, ReviewShop, Cart, Order, HistorySearch)
 from .serializer import (CategorySerializer, ShopSerializer, ProductSerializer,
                          ProductDetailSerializer, ReviewProductSerializer, ReviewShopSerializer,
-                         ShopDetailSerializer, ImageProductSerializer)
+                         ShopDetailSerializer, ImageProductSerializer, ProfileInfoSerialzer,
+                         CommentProductSerializer, CartSerializer, OrderSerializer, HistorySearchSerializer)
 
 
 
@@ -306,10 +308,182 @@ class ProductImageDestroyView(generics.DestroyAPIView):
 
 
 
+# -- Profile info
+class ProfileInfoView(generics.RetrieveAPIView):
+    serializer_class = ProfileInfoSerialzer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['User Info'])   
+    def get(self, request):
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
+
+
 # ---- Comments
 
-# class CommentsToProduct(generics.ListCreateAPIView):
+class CommentsProduct(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CommentProductSerializer
+    @swagger_auto_schema(tags=['Comments'])
+    def get(self, request, *args, **kwargs):
+        product_id = self.kwargs.get('pk')
+        serializer = self.get_serializer(CommentProduct.objects.filter(product_id=product_id), many=True)
+        return Response(serializer.data)
 
+class CommentsToProduct(generics.CreateAPIView):
+    serializer_class = CommentProductSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Comments'])
+    def get(self, request, *args, **kwargs):
+        product_id = self.kwargs.get('pk')
+        comments = CommentProduct.objects.filter(product_id=product_id)
+    
+    @swagger_auto_schema(tags=['Commnets'],consumes=['multipart/form-data'])
+    def post(self, request, *args, **kwargs):
+        product_id = self.kwargs.get('pk')
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user, product_id=product_id)
+
+class CommentDestroyView(generics.DestroyAPIView):
+    serializer_class = CommentProductSerializer
+    queryset = CommentProduct.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Comments'])
+    def delete(self, request, *args, **kwargs):
+        user = request.user
+        comment = self.get_object()
+        if user != comment.user:
+            return Response({'detail': 'You do not have permission to delete this comment.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
+
+class CommentUpdateView(generics.UpdateAPIView):
+    serializer_class = CommentProductSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['put']
+    @swagger_auto_schema(tags=['Comments'])
+    def put(self, request, *args, **kwargs):
+        user = request.user
+        comment = self.get_object()
+        if user != comment.user:
+            return Response({'detail': 'You do not have permission to update this comment.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().put(request, *args, **kwargs)
+
+
+# --- Cart logic
+
+class CartUserItemsView(generics.ListAPIView):
+    serializer_class = CartSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Cart'])
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        serializer = self.get_serializer(Cart.objects.filter(user=user), many=True)
+        return Response(serializer.data)
+
+class CartItemAddView(generics.CreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = CartSerializer
+    @swagger_auto_schema(tags=['Cart'])
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=kwargs.get('pk'))
+        serializer = self.get_serializer(product)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DeleteItemsCartView(generics.DestroyAPIView):
+    serializer_class = CommentProductSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Cart.objects.all()
+    @swagger_auto_schema(tags=['Cart'])
+    def delete(self, request, *args, **kwargs):
+        user = request.user
+        cart_item = get_object_or_404(Cart, pk=kwargs.get('pk'))
+        if user != cart_item.user:
+            return Response({'detail': 'You do not have permission to delete this item from your cart.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
+
+
+# --- Order items
+
+class OrderItemsView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Order'])
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        serializer = self.get_serializer(Order.objects.filter(user=user), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class OrderAddItemView(generics.CreateAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Order'])
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=kwargs.get('pk'))
+        serializer = self.get_serializer(product)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class OrderDestruyView(generics.DestroyAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Order.objects.all()
+    @swagger_auto_schema(tags=['Order'])
+    def delete(self, request, *args, **kwargs):
+        user = self.request.user
+        order = self.get_object()
+        if user != order.user:
+            return Response({'detail': 'You do not have permission to delete this order.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
+
+
+# --- History
+
+class HistoryUserView(generics.ListAPIView):
+    serializer_class = HistorySearchSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['History'])
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        serializer = self.get_serializer(HistorySearch.objects.filter(user=user)[:10], many=True)
+        return Response(data)
+
+class HistoryCreateView(generics.CreateAPIView):
+    serializer_class = HistorySearchSerializer
+    permission_classes = [permissions.IsAuthenticated | permissions.AllowAny]
+    @swagger_auto_schema(tags=['History'])
+    def post(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save(user=request.user)
+
+class HistoryDestroyView(generics.DestroyAPIView):
+    serializer_class = HistorySearchSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = HistorySearch.objects.all()
+    @swagger_auto_schema(tags=['History'])
+    def delete(self, request, *args, **kwargs):
+        user = request.user
+        history = self.get_object()
+        if user != history.user:
+            return Response({'detail': 'You do not have permission to delete this history.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
+
+
+
+
+
+
+
+
+        
 
 
 

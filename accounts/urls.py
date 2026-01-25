@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from .views import SendCodeView, RegisterView, LoginView, PasswordResetConfirmView, PasswordResetRequestView, TelegrammLinkView
+from .views import SendCodeView, RegisterView, LoginView, PasswordResetConfirmView, PasswordResetRequestView, TelegrammLinkView, GetUserInfoView
 
 
 class SwaggerTokenRefreshView(TokenRefreshView):
@@ -24,4 +24,5 @@ urlpatterns = [
     
     path('api/auth/token/refresh/', SwaggerTokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/telegramm-link/', TelegrammLinkView.as_view(), name='telegramm_link'),
+    path('api/auth/get-user-info/', GetUserInfoView.as_view(), name='get_user_info'),
 ]

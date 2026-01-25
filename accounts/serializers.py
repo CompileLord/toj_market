@@ -20,7 +20,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'code', 'first_name', 'last_name']
+        fields = ['email', 'password', 'code', 'avatar',  'first_name', 'last_name']
 
     def validate(self, attrs):
         email = attrs.get('email')
@@ -101,7 +101,7 @@ class ResetPasswordConfirmSerializer(serializers.Serializer):
 class GetUserInfoSerialzer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'email', 'first_name', 'last_name', 'telegram_id', 'role')
-        read_only_fields = ('id', 'email', 'role')
+        fields = ('id', 'email', 'avatar', 'first_name', 'last_name','telegram_id', 'role')
+        read_only_fields = ('id', 'email', 'role', 'telegram_id', 'avatar')
     
 

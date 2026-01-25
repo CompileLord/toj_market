@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.db.models import F, Count
+from accounts.serializers import GetUserInfoSerialzer
 from .models import (
     Category, Product, ImageProduct, CommentProduct, CrownProduct,
     ReviewProduct, Shop, User, HistorySearch, Cart, Order, ReviewShop
@@ -116,10 +117,7 @@ class CommentProductSerializer(serializers.ModelSerializer):
         fields = ('id', 'text', 'product', 'user')
         read_only_fields = ('id', 'product', 'user')
     
-    def create(self, validated_data):
-        user = self.context['request'].user
-        return CommentProduct.objects.create(user=user, **validated_data)
-
+    
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     comments = CommentProductSerializer(many=True, read_only=True)
@@ -143,11 +141,16 @@ class HistorySearchSerializer(serializers.ModelSerializer):
         return HistorySearch.objects.create(user=user, **validated_data)
 
 class CartSerializer(serializers.ModelSerializer):
+    total = serializers.SerializerMethodField()
+    product = ProductSerializer(read_only=True)
 
     class Meta:
         model = Cart
-        fields = ('id', 'user', 'product', 'count')
-        read_only_fields = ('id', 'user', 'product')
+        fields = ('id', 'user', 'total', 'product', 'count', 'created_at')
+        read_only_fields = ('id', 'user', 'product', 'total', 'created_at')
+    
+    def get_total(self, obj):
+        return obj.count * obj.product.price
     
     def validate(self, attrs):
         product = attrs['product']
@@ -247,6 +250,36 @@ class ReviewShopSerializer(serializers.ModelSerializer):
             shop.refresh_from_db
         
         return review
+    
+
+class ProfileInfoSerialzer(serializers.Serializer):    
+    user_info = serializers.SerializerMethodField()
+    totall_orders = serializers.SerializerMethodField()
+    last_added_cart_itemss = serializers.SerializerMethodField()
+
+    class Meta:
+        fields = ('user_info', 'totall_orders', 'last_added_cart_itemss')
+    
+    def get_user_info(self, obj):
+        user = self.context['request'].user
+        return GetUserInfoSerialzer(user).data
+    
+    def get_totall_orders(self, obj):
+        user = self.context['request'].user
+        return Order.objects.filter(user=user).count()
+    
+    def get_last_added_cart_itemss(self, obj):
+        user = self.context['request'].user
+        return CartSerializer(Cart.objects.filter(user=user).order_by('-created_at')[:4], many=True).data
+    
+    
+
+    
+
+    
+
+
+
     
     
         

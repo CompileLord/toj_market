@@ -8,13 +8,14 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from drf_yasg.utils import swagger_auto_schema
 from .models import VerificationCode, get_expiry_time
-from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer
+from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer, GetUserInfoSerialzer
 from .helpers import send_verification_email, send_welcome_message
 import random
 import secrets
+from threading import Thread
 
 
-User = get_user_model
+User = get_user_model()
 
 def get_tokens_by_user(user):
     refresh = RefreshToken.for_user(user)    
@@ -70,7 +71,12 @@ class RegisterView(views.APIView):
                 last_name = request.data.get('last_name')
                 email = request.data.get('email')
                 full_name = f'{first_name} {last_name}'
-                send_welcome_message(email=email, full_name=full_name)
+                email_thread = Thread(
+                    target=send_welcome_message,
+                    args=(email, full_name),
+                    daemon=True
+                )
+                email_thread.start()
             except Exception:
                 pass
             return Response({
@@ -145,7 +151,13 @@ class PasswordResetConfirmView(views.APIView):
         if serializer.is_valid():
             email = serializer.validated_data['email']
             new_password = serializer.validated_data['new_password']            
-            user = User.objects.get(email=email)
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response(
+                    {"error": "User with this email does not exist."}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )            
             user.set_password(new_password) 
             user.save()
             VerificationCode.objects.filter(email=email).delete()            
@@ -156,7 +168,7 @@ class TelegrammLinkView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     @swagger_auto_schema(
         operation_description='Get Telegram bot deep link for linking account',
-        tags=['Authentication'],
+        tags=['User Info'],
         consumes=['multipart/form-data']
     )
 
@@ -170,6 +182,15 @@ class TelegrammLinkView(views.APIView):
         return Response({'link': deep_link}, status=status.HTTP_200_OK)
 
 
+class GetUserInfoView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(
+        operation_description='Get user info',
+        tags=['User Info'], )
+    def get(self, request):
+        serializer = GetUserInfoSerialzer(request.user)
+        data = serializer.data
+        return Response(data, status=status.HTTP_200_OK)
 
 
 
