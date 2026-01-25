@@ -306,6 +306,13 @@ class ProductImageDestroyView(generics.DestroyAPIView):
 
 
 
+# ---- Comments
+
+# class CommentsToProduct(generics.ListCreateAPIView):
+
+
+
+
 
 
 

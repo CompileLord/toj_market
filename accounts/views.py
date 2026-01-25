@@ -170,3 +170,7 @@ class TelegrammLinkView(views.APIView):
         return Response({'link': deep_link}, status=status.HTTP_200_OK)
 
 
+
+
+
+

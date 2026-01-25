@@ -96,3 +96,12 @@ class ResetPasswordConfirmSerializer(serializers.Serializer):
             raise serializers.ValidationError('Email or code is incorrect')
         return attrs
 
+
+
+class GetUserInfoSerialzer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'email', 'first_name', 'last_name', 'telegram_id', 'role')
+        read_only_fields = ('id', 'email', 'role')
+    
+
