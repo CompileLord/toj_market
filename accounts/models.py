@@ -42,7 +42,7 @@ class CustomUser(AbstractUser):
 
     username = None
     email = models.EmailField(unique=True)
-    telegram_id = models.BigIntegerField(null=True, blank=True)
+    telegram_id = models.BigIntegerField(null=True, blank=True, unique=True)
     telegram_token = models.CharField(max_length=255, null=True, blank=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)

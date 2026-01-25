@@ -4,7 +4,7 @@ from .views import (
     ShopListView, ShopDetailView, ShopCreateView, ShopPutView, ShopDestroyView,
     ProductListView, ProductCreateView, ProductPutView, ProductDestroyView, ProductDetailView, ProductImageAddView, ProductImageDestroyView,
     ProfileInfoView, CartUserItemsView, DeleteItemsCartView, OrderItemsView, OrderAddItemView, OrderDestruyView,
-    HistoryUserView, HistoryCreateView, HistoryDestroyView, CartItemAddView
+    HistoryUserView, HistoryCreateView, HistoryDestroyView, CartItemAddView, CrownProductView
 
 )
 
@@ -53,6 +53,9 @@ urlpatterns = [
     path('api/history/get-all-items/', HistoryUserView.as_view(), name='history-items'),
     path('api/history/add-item/', HistoryCreateView.as_view(), name='history-add'),
     path('api/history/delete-item/<int:pk>', HistoryDestroyView.as_view(), name='history-delete'),
+
+    # -- Crown product
+    path('api/crowns/add-item/<int:pk>', CrownProductView.as_view(), name='crowns-add')
 
 
 

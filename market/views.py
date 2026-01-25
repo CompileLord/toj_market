@@ -16,7 +16,8 @@ from .models import (Category, Shop, Product, ReviewProduct, ImageProduct, Comme
 from .serializer import (CategorySerializer, ShopSerializer, ProductSerializer,
                          ProductDetailSerializer, ReviewProductSerializer, ReviewShopSerializer,
                          ShopDetailSerializer, ImageProductSerializer, ProfileInfoSerialzer,
-                         CommentProductSerializer, CartSerializer, OrderSerializer, HistorySearchSerializer)
+                         CommentProductSerializer, CartSerializer, OrderSerializer, HistorySearchSerializer,
+                         CrownProductSerializer)
 
 
 
@@ -477,6 +478,19 @@ class HistoryDestroyView(generics.DestroyAPIView):
         return super().delete(request, *args, **kwargs)
 
 
+# --- Crown product
+
+class CrownProductView(generics.CreateAPIView):
+    serializer_class = CrownProductSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    @swagger_auto_schema(tags=['Crowns'],consumes=['multipart/form-data'])
+    def post(self, request, *args, **kwargs):
+        product = get_object_or_404(Product, pk=kwargs.get('pk'))
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user, product=product)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 

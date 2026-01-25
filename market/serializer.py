@@ -28,7 +28,7 @@ class ShopSerializer(serializers.ModelSerializer):
     
     def validate(self, attrs):
         user = self.context['request'].user
-        if user.telegram_id is None:
+        if not user.telegram_id :
             raise serializers.ValidationError('You must set your telegram id')
         return attrs
 
