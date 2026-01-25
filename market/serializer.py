@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.db.models import F
+from django.db.models import F, Count
 from .models import (
     Category, Product, ImageProduct, CommentProduct, CrownProduct,
     ReviewProduct, Shop, User, HistorySearch, Cart, Order, ReviewShop
@@ -17,35 +17,58 @@ class CategorySerializer(serializers.ModelSerializer):
         return value
 
 class ShopSerializer(serializers.ModelSerializer):
-    seller_full_name = serializers.SerializerMethodField()
     avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
-    total_products = serializers.IntegerField(read_only=True)
-    total_orders = serializers.IntegerField(read_only=True)
     avatar = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Shop
-        fields = ('id', 'seller_full_name','title', 'bio', 'avatar', 'avg_crowns', 
-                  'total_products', 'total_orders', 'review_count')
-        read_only_fields = ('id', 'seller_full_name', 'review_count')
+        fields = ('id', 'title', 'bio', 'avatar', 'avg_crowns',  'review_count')
+        read_only_fields = ('id',  'review_count')
     
     def validate(self, attrs):
         user = self.context['request'].user
-        if Shop.objects.filter(seller=user).exists():
-            raise serializers.ValidationError('You already have a shop')
         if user.telegram_id is None:
             raise serializers.ValidationError('You must set your telegram id')
         return attrs
 
-
-    def get_seller_full_name(self, obj):
-        return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
     
     def create(self, validated_data):
         user = self.context['request'].user
         user.role = 'SL'
         user.save()
+        if Shop.objects.filter(seller=user).exists():
+            raise serializers.ValidationError('You already have a shop')
         return Shop.objects.create(seller=user, **validated_data)
+
+
+class ShopDetailSerializer(serializers.ModelSerializer):
+    seller_full_name = serializers.SerializerMethodField()
+    avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
+    total_products = serializers.IntegerField(read_only=True)
+    total_orders = serializers.IntegerField(read_only=True)
+    avatar = serializers.ImageField(required=False, allow_null=True)
+    last_added_product = serializers.SerializerMethodField()
+    most_popular_products = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Shop
+        fields = ('id', 'seller_full_name','title', 'bio', 'avatar', 'avg_crowns', 
+                  'total_products', 'total_orders', 'review_count', 'last_added_product', 
+                  'most_popular_products', 'created_at')
+        read_only_fields = ('id', 'seller_full_name', 'review_count')
+
+    def get_last_added_product(self, obj):
+        last_product = obj.products.order_by('-created_at').first()
+        return last_product if last_product else None
+
+    def get_most_popular_products(self, obj):
+        most_popular_products = obj.products.annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
+        return ProductSerializer(most_popular_products, many=True).data
+    
+
+    def get_seller_full_name(self, obj):
+        return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
+
 
 class ImageProductSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False, allow_null=True)
@@ -53,7 +76,9 @@ class ImageProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = ImageProduct
         fields = ('id', 'product', 'image', 'is_main_image')
-        read_only_fields = ('id',)
+        read_only_fields = ('id', 'product')
+    
+
 
 class ProductSerializer(serializers.ModelSerializer):
     avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
@@ -90,6 +115,11 @@ class CommentProductSerializer(serializers.ModelSerializer):
         model = CommentProduct
         fields = ('id', 'text', 'product', 'user')
         read_only_fields = ('id', 'product', 'user')
+    
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return CommentProduct.objects.create(user=user, **validated_data)
+
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     comments = CommentProductSerializer(many=True, read_only=True)
@@ -182,8 +212,8 @@ class ReviewProductSerializer(serializers.ModelSerializer):
         read_only_fields = ('id','product', 'user')
 
     def create(self, validated_data):
-        user = self.context['request'].user
-        product = validated_data.get('product')
+        user = self.context['user']
+        product = self.context['product']
 
         review, created = ReviewProduct.objects.update_or_create(
             user=user,
@@ -203,8 +233,8 @@ class ReviewShopSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'user', 'shop')
     
     def create(self, validated_data):
-        user = self.context['request'].user
-        shop = validated_data.get('shop')
+        user = self.context['user']
+        shop = self.context['shop']
 
         review, created = ReviewShop.objects.update_or_create(
             user = user,

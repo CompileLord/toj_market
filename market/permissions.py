@@ -41,7 +41,20 @@ class IsSellerHard(BasePermission):
 class IsOwnerShop(BasePermission):
     def has_object_permission(self, request, view, obj):
         return obj.seller == request.user
+
+class IsOwnerImageProduct(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role == 'SL'
+        )
     
+    def has_object_permission(self, request, view, obj):
+        return obj.product.shop.seller == request.user
+
 
 class IsOwnerProduct(BasePermission):
     def has_object_permission(self, request, view, obj):

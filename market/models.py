@@ -51,8 +51,8 @@ class ImageProduct(models.Model):
     image = models.ImageField(upload_to='product_additional_images/')
     is_main_image = models.BooleanField(default=False)
     def save(self, *args, **kwargs):
-        if self.is_main_image: 
-            ImageProduct.objects.filter(product=self.product).update(is_main_image=False)
+        if self.is_main_image and self.product_id:
+            ImageProduct.objects.filter(product_id=self.product_id).update(is_main_image=False)
         super().save(*args, **kwargs)
 
 

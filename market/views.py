@@ -10,10 +10,11 @@ from django.shortcuts import get_object_or_404
 from django.db.models.functions import Coalesce
 from django.core.cache import cache
 
-from .permissions import IsAdmin, IsOwnerProduct, IsOwnerShop
-from .models import (Category, Shop, Product, ReviewProduct)
+from .permissions import IsAdmin, IsOwnerProduct, IsOwnerShop, IsOwnerImageProduct, IsSeller
+from .models import (Category, Shop, Product, ReviewProduct, ImageProduct)
 from .serializer import (CategorySerializer, ShopSerializer, ProductSerializer,
-                         ProductDetailSerializer, ReviewProductSerializer)
+                         ProductDetailSerializer, ReviewProductSerializer, ReviewShopSerializer,
+                         ShopDetailSerializer, ImageProductSerializer)
 
 
 
@@ -134,7 +135,8 @@ class ShopListView(generics.ListAPIView):
         return Response(data)
     
 class ShopDetailView(generics.RetrieveAPIView):
-    serializer_class = ShopSerializer
+    serializer_class = ShopDetailSerializer
+    permission_classes = [permissions.AllowAny]  
     queryset = Shop.objects.all()
     @swagger_auto_schema(tags=['Shop'], consumes=['multipart/form-data'])  
     def get(self, request, *args, **kwargs):
@@ -146,6 +148,14 @@ class ShopDetailView(generics.RetrieveAPIView):
             serializer = self.get_serializer(shop)
             data = serializer.data
             cache.set(cache_key, data, 60)
+        serializer_reviews = ReviewShopSerializer(
+            context = {'user': request.user, 'shop': shop},
+            data = {'user': request.user.id, 'shop': shop.id}
+        )
+        if serializer_reviews.is_valid():
+            serializer_reviews.save()
+            print(serializer_reviews.data)
+
         
         return Response(serializer.data)
 
@@ -214,6 +224,15 @@ class ProductDetailView(generics.RetrieveAPIView):
             serializer = self.get_serializer(product)
             data = serializer.data
             cache.set(cache_key, data, 60)
+        if request.user.is_authenticated:
+            serializer_reviews = ReviewProductSerializer(
+                context = {'user': request.user, 'product': product},
+                data = {'user': request.user.id, 'product': product.id}
+            )
+            if serializer_reviews.is_valid():
+                serializer_reviews.save()
+                print(serializer_reviews.data)
+        data['reviews'] = serializer_reviews.data
         return Response(data)
 
 class ProductCreateView(generics.CreateAPIView):
@@ -244,9 +263,48 @@ class ProductDestroyView(generics.DestroyAPIView):
         cache.clear()
         return super().delete(request, *args, **kwargs)
 
-class ProductImageView(generics.ListAPIView):
-    serializer_class = ProductDetailSerializer
-    permission_classes = [permissions.AllowAny]
+class ProductImageAddView(generics.CreateAPIView):
+    serializer_class = ImageProductSerializer
+    permission_classes = [IsAdmin | IsSeller]
+    @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
+    def post(self, request, *args, **kwargs):
+        product_id = self.kwargs.get('pk')
+        product = get_object_or_404(Product, id=product_id)
+        if not (request.user.role == 'AD' or request.user.is_staff or product.shop.seller == request.user):
+            return Response(
+                {'detail': 'You do not have permission to add images to this product.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(product_id=product_id)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return ImageProduct.objects.none()
+
+        product_id = self.kwargs.get('pk') 
+        return ImageProduct.objects.filter(product_id=product_id)
+
+class ProductImageDestroyView(generics.DestroyAPIView):
+    serializer_class = ImageProductSerializer
+    queryset = ImageProduct.objects.all()
+    permission_classes = [IsAdmin | IsSeller]
+    @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
+    def delete(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not (request.user.role == 'AD' or request.user.is_staff or instance.product.shop.seller == request.user):
+            return Response(
+                {'detail': 'You do not have permission to delete this image.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        return super().delete(request, *args, **kwargs)
+
+
 
 
 
