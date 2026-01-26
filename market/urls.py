@@ -4,7 +4,7 @@ from .views import (
     ShopListView, ShopDetailView, ShopCreateView, ShopPutView, ShopDestroyView,
     ProductListView, ProductCreateView, ProductPutView, ProductDestroyView, ProductDetailView, ProductImageAddView, ProductImageDestroyView,
     ProfileInfoView, CartCreateView, CartListView, CartDetailView, CartDestroyView, CartUpdateView,
-    OrderListView, OrderDetailView, CreateOrderView, CommentCreateView, CommentDestroyView, CommentUpdateView, CommentListView,
+    OrderListView, OrderDetailView, CreateOrderView,  CommentDestroyView, CommentUpdateView, CommentListView,
     MyCommentsListView, CommentDetailView,
     HistoryUserView, HistoryCreateView, HistoryDestroyView, CrownProductView,
     CommentsProduct, CommentsToProduct  # Added missing imports
@@ -64,6 +64,6 @@ urlpatterns = [
     path('comments/<int:pk>/update/', CommentUpdateView.as_view(), name='comment-update'),
 
     path('comments/product/<int:product_id>/', CommentListView.as_view(), name='comment-list'),
-    path('comments/product/<int:product_id>/add/', CommentCreateView.as_view(), name='comment-create'),
+    # path('comments/product/<int:product_id>/add/', CommentCreateView.as_view(), name='comment-create'),
     path('comments/<int:pk>/detail/', CommentDetailView.as_view(), name='comment-detail'),
 ]

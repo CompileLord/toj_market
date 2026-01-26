@@ -203,9 +203,9 @@ class MarketBot:
 
         products = await DB.get_last_products(user)
         for prod in products:
-            caption = f"📦 {prod.name}\n🏷️ Price: {prod.price}"
-            if prod.image:
-                file_path = os.path.join('media', str(prod.image))
+            caption = f"📦 {prod.title}\n🏷️ Price: {prod.price}"
+            if prod.images:
+                file_path = os.path.join('media', str(prod.images))
                 if os.path.exists(file_path):
                     await message.answer_photo(photo=FSInputFile(file_path), caption=caption)
                     continue

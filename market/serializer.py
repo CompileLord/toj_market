@@ -48,7 +48,7 @@ class ShopDetailSerializer(serializers.ModelSerializer):
     total_products = serializers.IntegerField(read_only=True)
     total_orders = serializers.IntegerField(read_only=True)
     avatar = serializers.ImageField(required=False, allow_null=True)
-    last_added_product = serializers.SerializerMethodField()  # Change this
+    last_added_product = serializers.SerializerMethodField()  
     most_popular_products = serializers.SerializerMethodField()
 
     class Meta:
@@ -61,14 +61,28 @@ class ShopDetailSerializer(serializers.ModelSerializer):
     def get_seller_full_name(self, obj):
         return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        last_product = instance.products.order_by('-created_at').first()
-        representation['last_added_product'] = ProductSerializer(last_product).data if last_product else None
-        most_popular_products = instance.products.annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
-        representation['most_popular_products'] = ProductSerializer(most_popular_products, many=True).data
-        return representation
+    def get_last_added_product(self, obj):
+        last_product = obj.products.order_by('-created_at').first()
+        return ProductSerializer(last_product).data if last_product else None
 
+    def get_most_popular_products(self, obj):
+        most_popular_products = obj.products.annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
+        return ProductSerializer(most_popular_products, many=True).data
+
+    def create(self, validated_data):
+        user = self.context['user']
+        shop = self.context['prodshopuct']
+
+        review, created = ReviewShop.objects.update_or_create(
+            user=user,
+            shop=shop
+        )
+        if created:
+            shop.review_count = F('review_count') + 1
+            shop.save()
+        
+        return review
+        
 
 class ImageProductSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False, allow_null=True)
@@ -113,7 +127,20 @@ class CommentProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommentProduct
         fields = ('id', 'text', 'product', 'user')
-        read_only_fields = ('id', 'product', 'user')
+        read_only_fields = ('id',  'user')
+    
+    def validate(self, attrs):
+        product = attrs.get('product')
+        user = self.context['request'].user
+        
+        if CommentProduct.objects.filter(product=product, user=user).count() > 3:
+            raise serializers.ValidationError("You have already 3 comments for this product")
+        
+        if not Product.objects.filter(id=product.id).exists():
+            raise serializers.ValidationError("This product does not exist.")
+        
+        return attrs
+
     
     
 
@@ -161,7 +188,7 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = ('id', 'user', 'product', 'quantity', 'created_at', 'updated_at', 'product_name', 'product_price', 'total_price')
-        read_only_fields = ('id', 'user', 'product')
+        read_only_fields = ('id', 'user')
     
     def validate(self, attrs):
         product = attrs.get('product')
@@ -174,11 +201,19 @@ class CartSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         product = validated_data.get('product')
         quantity = validated_data.get('quantity')
-        cart_item, created = Cart.objects.update_or_create(
-            user=user,
-            product=product,
-            defaults={'quantity': F('quantity') + quantity}
-        )
+        
+        try:
+            cart_item = Cart.objects.get(user=user, product=product)
+            cart_item.quantity = F('quantity') + quantity
+            cart_item.save()
+            cart_item.refresh_from_db()  
+        except Cart.DoesNotExist:
+            cart_item = Cart.objects.create(
+                user=user,
+                product=product,
+                quantity=quantity
+            )
+        
         return cart_item
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -201,7 +236,7 @@ class CreateOrderSerializer(serializers.Serializer):
     cart_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
-        help_text="ID products for the bought. If empty we will give  you all products from cart"
+        help_text="ID products for the bought. If empty we will give you all products from cart"
     )
 
     def validate(self, data):
@@ -221,7 +256,7 @@ class CreateOrderSerializer(serializers.Serializer):
         for item in cart_items:
             if item.product.quantity < item.quantity:
                 raise serializers.ValidationError(
-                    f"Product '{item.product.name}' is not available for quantity {item.quantity}"
+                    f"Product '{item.product.title}' is not available for quantity {item.quantity}" 
                 )
 
         data['cart_items'] = cart_items
@@ -232,31 +267,35 @@ class CreateOrderSerializer(serializers.Serializer):
         cart_items = validated_data['cart_items']
         user = request.user
 
-        order = Order.objects.create(user=user)
-
         total_amount = 0
         order_items = []
-
         for cart_item in cart_items:
             product = cart_item.product
             quantity = cart_item.quantity
             price = product.price
-
+            total_amount += price * quantity
             order_items.append(
                 OrderItem(
-                    order=order,
                     product=product,
                     quantity=quantity,
                     price_at_purchase=price
                 )
             )
-
+        first_product = cart_items.first().product if cart_items else None
+        order = Order.objects.create(
+            user=user,
+            product=first_product, 
+            total_amount=total_amount
+        )
+        for order_item in order_items:
+            order_item.order = order
+        
+        OrderItem.objects.bulk_create(order_items)
+        for cart_item in cart_items:
+            product = cart_item.product
+            quantity = cart_item.quantity
             product.quantity -= quantity
             product.save()
-            total_amount += price * quantity
-        OrderItem.objects.bulk_create(order_items)
-        order.total_amount = total_amount
-        order.save()
         cart_items.delete()
 
         return order

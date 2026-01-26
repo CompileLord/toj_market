@@ -181,14 +181,20 @@ class ShopCreateView(generics.CreateAPIView):
 
 class ShopPutView(generics.UpdateAPIView):
     serializer_class = ShopSerializer
-    queryset = Shop.objects.all()
     permission_classes = [IsAdmin | IsOwnerShop]
     http_method_names = ['put']
+    queryset = Shop.objects.all()
     
     @swagger_auto_schema(tags=['Shop'], consumes=['multipart/form-data'])  
     def put(self, request, *args, **kwargs):
         cache.clear()
+        user = request.user
+        if self.get_object().seller != user and not user.is_staff:
+            return Response({'detail': 'You do not have permission to update this shop.'},status=status.HTTP_403_FORBIDDEN)
+        serializer= self.get_serializer(data=request.data)
+        serializer.save()
         return super().put(request, *args, **kwargs)
+            
 
 class ShopDestroyView(generics.DestroyAPIView):
     serializer_class = ShopSerializer
@@ -341,18 +347,23 @@ class CommentsProduct(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data)
-
+    
 class CommentsToProduct(generics.CreateAPIView):
     serializer_class = CommentProductSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = CommentProduct.objects.none()
     
-    @swagger_auto_schema(tags=['Commnets'],consumes=['multipart/form-data'])
+    @swagger_auto_schema(tags=['Comments'], consumes=['multipart/form-data'])
     def post(self, request, *args, **kwargs):
         product_id = self.kwargs.get('pk')
-        serializer = self.get_serializer(data=request.data)
+        product = get_object_or_404(Product, id=product_id)
+        
+        data = request.data.copy()
+        data['product'] = product_id
+        
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user, product_id=product_id)
+        serializer.save(user=request.user, product=product) 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class CommentDestroyView(generics.DestroyAPIView):
@@ -396,22 +407,27 @@ class CartListView(generics.ListAPIView):
     @swagger_auto_schema(tags=['Cart'])
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
 class CartCreateView(generics.CreateAPIView):
     serializer_class = CartSerializer
     permission_classes = [permissions.IsAuthenticated]
-    queryset = Cart.objects.none()
+    queryset = Cart.objects.none()    
     
-    def get_queryset(self):
-        if getattr(self, 'swagger_fake_view', False):
-            return Cart.objects.none()
-        if self.request.user.is_authenticated:
-            return Cart.objects.filter(user=self.request.user)
-        return Cart.objects.none()
-    
-    @swagger_auto_schema(tags=['Cart'])
+    @swagger_auto_schema(tags=['Cart'], consumes=['multipart/form-data'])
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        product_id = request.data.get('product')
+        
+        if not product_id:
+            return Response(
+                {'detail': 'Product ID is required in the request body.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        product = get_object_or_404(Product, id=product_id)
+        data = request.data.copy()        
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user, product=product)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class CartDetailView(generics.RetrieveAPIView):
     serializer_class = CartSerializer
@@ -576,15 +592,17 @@ class CommentListView(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-class CommentCreateView(generics.CreateAPIView):
-    serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    queryset = CommentProduct.objects.none()
-    
-    def perform_create(self, serializer):
-        product_id = self.kwargs.get('product_id')
-        product = get_object_or_404(Product, id=product_id)
-        serializer.save(user=self.request.user, product=product)
+# class CommentCreateView(generics.CreateAPIView):
+#     serializer_class = CommentSerializer
+#     permission_classes = [permissions.IsAuthenticated]
+#     queryset = CommentProduct.objects.none()
+#     @swagger_auto_schema(tags=['Comments'],consumes=['multipart/form-data'])
+#     def post(self, request, *args, **kwargs):
+#         return super().post(request, *args, **kwargs)
+#     def perform_create(self, serializer):
+#         product_id = self.kwargs.get('product_id')
+#         product = get_object_or_404(Product, id=product_id)
+#         serializer.save(user=self.request.user, product=product)
 
 class CommentDetailView(generics.RetrieveAPIView):
     queryset = CommentProduct.objects.all()
@@ -637,6 +655,6 @@ class MyCommentsListView(generics.ListAPIView):
             return CommentProduct.objects.filter(user=self.request.user)
         return CommentProduct.objects.none()
     
-    @swagger_auto_schema(tags=['Prodile Info'])
+    @swagger_auto_schema(tags=['User Info'])
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
