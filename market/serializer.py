@@ -3,7 +3,7 @@ from django.db.models import F, Count
 from accounts.serializers import GetUserInfoSerialzer
 from .models import (
     Category, Product, ImageProduct, CommentProduct, CrownProduct,
-    ReviewProduct, Shop, User, HistorySearch, Cart, Order, ReviewShop
+    ReviewProduct, Shop, User, HistorySearch, Cart, Order, ReviewShop, OrderItem
 )
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -48,7 +48,7 @@ class ShopDetailSerializer(serializers.ModelSerializer):
     total_products = serializers.IntegerField(read_only=True)
     total_orders = serializers.IntegerField(read_only=True)
     avatar = serializers.ImageField(required=False, allow_null=True)
-    last_added_product = serializers.SerializerMethodField()
+    last_added_product = serializers.SerializerMethodField()  # Change this
     most_popular_products = serializers.SerializerMethodField()
 
     class Meta:
@@ -57,18 +57,17 @@ class ShopDetailSerializer(serializers.ModelSerializer):
                   'total_products', 'total_orders', 'review_count', 'last_added_product', 
                   'most_popular_products', 'created_at')
         read_only_fields = ('id', 'seller_full_name', 'review_count')
-
-    def get_last_added_product(self, obj):
-        last_product = obj.products.order_by('-created_at').first()
-        return last_product if last_product else None
-
-    def get_most_popular_products(self, obj):
-        most_popular_products = obj.products.annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
-        return ProductSerializer(most_popular_products, many=True).data
     
-
     def get_seller_full_name(self, obj):
         return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        last_product = instance.products.order_by('-created_at').first()
+        representation['last_added_product'] = ProductSerializer(last_product).data if last_product else None
+        most_popular_products = instance.products.annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
+        representation['most_popular_products'] = ProductSerializer(most_popular_products, many=True).data
+        return representation
 
 
 class ImageProductSerializer(serializers.ModelSerializer):
@@ -102,9 +101,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context['request'].user
-        try:
-            user_shop = Shop.objects.get(seller=user)
-        except Shop.DoesNotExist:
+        user_shop = Shop.objects.filter(seller=user).first()
+        if not user_shop:
             raise serializers.ValidationError("You must create a shop first.")
             
         return Product.objects.create(shop=user_shop, **validated_data)
@@ -122,13 +120,27 @@ class CommentProductSerializer(serializers.ModelSerializer):
 class ProductDetailSerializer(serializers.ModelSerializer):
     comments = CommentProductSerializer(many=True, read_only=True)
     images = ImageProductSerializer(many=True, read_only=True)
+    shop_info = serializers.SerializerMethodField()
+    category_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ('id', 'title', 'description', 'price', 'quantity', 'discount', 
-                  'created_at', 'shop', 'category', 'views_count', 'comments', 'images')
-        read_only_fields = ('id', 'shop', 'views_count', 'created_at', 'comments', 'images')
-
+                  'created_at', 'shop', 'category', 'views_count', 'comments', 
+                  'images', 'shop_info', 'category_info')
+        read_only_fields = ('id', 'shop', 'views_count', 'created_at', 
+                           'comments', 'images', 'shop_info', 'category_info')
+    
+    def get_shop_info(self, obj):
+        return ShopSerializer(obj.shop).data if obj.shop else None
+    
+    def get_category_info(self, obj):
+        return {
+            'id': obj.category.id,
+            'title': obj.category.title,
+            'avatar': obj.category.avatar.url if obj.category.avatar else None
+        } if obj.category else None
+    
 class HistorySearchSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -140,54 +152,118 @@ class HistorySearchSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         return HistorySearch.objects.create(user=user, **validated_data)
 
+
 class CartSerializer(serializers.ModelSerializer):
-    total = serializers.SerializerMethodField()
-    product = ProductSerializer(read_only=True)
+    product_name = serializers.CharField(source='product.title', read_only=True)
+    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
+    total_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     class Meta:
         model = Cart
-        fields = ('id', 'user', 'total', 'product', 'count', 'created_at')
-        read_only_fields = ('id', 'user', 'product', 'total', 'created_at')
-    
-    def get_total(self, obj):
-        return obj.count * obj.product.price
+        fields = ('id', 'user', 'product', 'quantity', 'created_at', 'updated_at', 'product_name', 'product_price', 'total_price')
+        read_only_fields = ('id', 'user', 'product')
     
     def validate(self, attrs):
-        product = attrs['product']
-        count = attrs['count']
-        if product.quantity < count:
-            raise serializers.ValidationError('The count can not be more then quantity of the product')
-        cart = Cart.objects.filter(id=product, user=attrs['user'])
-        if cart.exists():
-            raise serializers.ValidationError('You already have this product in your cart')
+        product = attrs.get('product')
+        quantity = attrs.get('quantity')
+        if product.quantity < quantity:
+            raise serializers.ValidationError(f'Not enough quantity! Available: {product.quantity}')
         return attrs
-
+    
     def create(self, validated_data):
         user = self.context['request'].user
-        product = self.validated_data.get('product')
-        count = self.validated_data.get('count')
-        cart_item, created = Cart.objects.get_or_create(
+        product = validated_data.get('product')
+        quantity = validated_data.get('quantity')
+        cart_item, created = Cart.objects.update_or_create(
             user=user,
-            product = product,
-            defaults={'count': count}
+            product=product,
+            defaults={'quantity': F('quantity') + quantity}
         )
-        if not created:
-            cart_item.count += count
-            cart_item.save()
         return cart_item
 
+class OrderItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.title', read_only=True)
+    class Meta:
+        model = OrderItem
+        fields = ('id', 'order', 'product', 'quantity', 'product_name', 'price_at_purchase')
+        read_only_fields = ('id', 'order', 'product', 'price_at_purchase')
 
 
 class OrderSerializer(serializers.ModelSerializer):
-
+    items = OrderItemSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     class Meta:
         model = Order
-        fields = ('id', 'user', 'product', 'status', 'count', 'price_at_purchase', 'created_at')
-        read_only_fields = ('id', 'user', 'product', 'status', 'count',  'price_at_purchase', 'created_at')
-    
-    def create(self, validated_data):
+        fields = ('id', 'user', 'items', 'status', 'status_display', 'created_at', 'total_amount')
+        read_only_fields = ('id', 'user', 'items', 'created_at', 'total_amount')
+
+class CreateOrderSerializer(serializers.Serializer):
+    cart_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        help_text="ID products for the bought. If empty we will give  you all products from cart"
+    )
+
+    def validate(self, data):
         user = self.context['request'].user
-        return Order.objects.create(user=user, **validated_data)
+        cart_ids = data.get('cart_ids')
+
+        if cart_ids:
+            cart_items = Cart.objects.filter(user=user, id__in=cart_ids)
+            if len(cart_items) != len(cart_ids):
+                raise serializers.ValidationError("Some products does not found in cart")
+        else:
+            cart_items = Cart.objects.filter(user=user)
+
+        if not cart_items.exists():
+            raise serializers.ValidationError("Cart is empty")
+
+        for item in cart_items:
+            if item.product.quantity < item.quantity:
+                raise serializers.ValidationError(
+                    f"Product '{item.product.name}' is not available for quantity {item.quantity}"
+                )
+
+        data['cart_items'] = cart_items
+        return data
+
+    def create(self, validated_data):
+        request = self.context['request']
+        cart_items = validated_data['cart_items']
+        user = request.user
+
+        order = Order.objects.create(user=user)
+
+        total_amount = 0
+        order_items = []
+
+        for cart_item in cart_items:
+            product = cart_item.product
+            quantity = cart_item.quantity
+            price = product.price
+
+            order_items.append(
+                OrderItem(
+                    order=order,
+                    product=product,
+                    quantity=quantity,
+                    price_at_purchase=price
+                )
+            )
+
+            product.quantity -= quantity
+            product.save()
+            total_amount += price * quantity
+        OrderItem.objects.bulk_create(order_items)
+        order.total_amount = total_amount
+        order.save()
+        cart_items.delete()
+
+        return order
+
+    
+
+
 
 
 class CrownProductSerializer(serializers.ModelSerializer):
@@ -197,17 +273,16 @@ class CrownProductSerializer(serializers.ModelSerializer):
         fields = ('id', 'user', 'crowns', 'product')
         read_only_fields = ('id', 'user', 'product')
     
-    def validate(self, attrs):
-        user = self.context['request'].user
-        product = attrs.get('product')
-        crown_instance = CrownProduct.objects.filter(user=user, product=product)
-        if crown_instance:
-            self.instance = crown_instance
-        return attrs   
-    
     def create(self, validated_data):
         user = self.context['request'].user
-        return CrownProduct.objects.create(user=user, **validated_data)
+        product = validated_data.get('product')
+        crowns = validated_data.get('crowns')
+        crown_instance, created = CrownProduct.objects.update_or_create(
+            user=user,
+            product=product,
+            defaults={'crowns': crowns}
+        )
+        return crown_instance
 
 class ReviewProductSerializer(serializers.ModelSerializer):
     class Meta:
@@ -226,7 +301,6 @@ class ReviewProductSerializer(serializers.ModelSerializer):
         if created:
             product.views_count = F('views_count') + 1
             product.save()
-            product.refresh_from_db()
         
         return review
 
@@ -247,30 +321,41 @@ class ReviewShopSerializer(serializers.ModelSerializer):
         if created:
             shop.review_count = F('review_count') + 1
             shop.save()
-            shop.refresh_from_db
         
         return review
     
 
-class ProfileInfoSerialzer(serializers.Serializer):    
+class ProfileInfoSerializer(serializers.Serializer):    
     user_info = serializers.SerializerMethodField()
-    totall_orders = serializers.SerializerMethodField()
-    last_added_cart_itemss = serializers.SerializerMethodField()
-
-    class Meta:
-        fields = ('user_info', 'totall_orders', 'last_added_cart_itemss')
+    total_orders = serializers.SerializerMethodField()  
+    last_added_cart_items = serializers.SerializerMethodField()  
+    
     
     def get_user_info(self, obj):
         user = self.context['request'].user
         return GetUserInfoSerialzer(user).data
     
-    def get_totall_orders(self, obj):
+    def get_total_orders(self, obj):  
         user = self.context['request'].user
         return Order.objects.filter(user=user).count()
     
-    def get_last_added_cart_itemss(self, obj):
+    def get_last_added_cart_items(self, obj):  
         user = self.context['request'].user
         return CartSerializer(Cart.objects.filter(user=user).order_by('-created_at')[:4], many=True).data
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.first_name', read_only=True)
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    
+    class Meta:
+        model = CommentProduct
+        fields = ['id', 'text', 'product', 'user', 'user_name', 'user_id', 'created_at']
+        read_only_fields = ['id', 'user', 'user_name', 'user_id', 'created_at']
+    
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
     
     
 

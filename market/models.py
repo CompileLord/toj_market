@@ -60,6 +60,7 @@ class CommentProduct(models.Model):
     text = models.TextField()
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='comments')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class CrownProduct(models.Model):
@@ -83,14 +84,22 @@ class HistorySearch(models.Model):
 class Cart(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE,related_name='cart_items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    count = models.IntegerField(default=1)
+    quantity = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         unique_together = ('user', 'product')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.first_name} {self.user.last_name} - {self.product.title} x {self.quantity}'
 
     @property
     def totall(self):
-        return self.product.price * self.count
+        return self.product.price * self.quantity
+
+    
 
 
 
@@ -104,11 +113,26 @@ class Order(models.Model):
     status = models.CharField(max_length=2, choices=Status.choices, default=Status.PENDING)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='orders')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='order_items')
-    count = models.IntegerField(default=1)
+    total_amount = models.DecimalField(max_digits=20, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Order #{self.id} - {self.user.first_name} {self.user.last_name} - {self.product.title}'
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    quantity = models.PositiveIntegerField(default=1)
     price_at_purchase = models.DecimalField(max_digits=20, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
-    class Meta:
-        unique_together = ('user', 'product')
+    
+    def __str__(self):
+        return f'{self.product.title} x {self.quantity} @{self.price_at_purchase}'
+
+
+
+
 
 
 

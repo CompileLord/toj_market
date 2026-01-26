@@ -21,8 +21,8 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('accounts/', include('accounts.urls')),
-    path('toj_market/', include('market.urls')),
+    path('api/accounts/', include('accounts.urls')),
+    path('api/toj_market/', include('market.urls')),
 
     # Swagger UI
     re_path(
