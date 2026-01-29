@@ -4,3 +4,4 @@ migrations
 .env
 .venv
 media
+.idea
