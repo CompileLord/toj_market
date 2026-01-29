@@ -8,8 +8,10 @@ from drf_yasg.utils import swagger_auto_schema
 from django.db.models import Avg, Count, DecimalField
 from django.shortcuts import get_object_or_404
 from django.db.models.functions import Coalesce
+from django.db.models import Q
 from django.core.cache import cache
 from django.db import transaction
+
 
 from .permissions import IsAdmin, IsOwnerProduct, IsOwnerShop, IsOwnerImageProduct, IsSeller
 from .models import (Category, Shop, Product, ReviewProduct, ImageProduct, CommentProduct,
@@ -209,17 +211,45 @@ class ShopDestroyView(generics.DestroyAPIView):
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductSerializer
     permission_classes = [permissions.AllowAny]
-    
+
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Product.objects.none()
-        return Product.objects.annotate(
+
+        queryset = Product.objects.annotate(
             avg_crowns=Coalesce(
                 Avg('product_crowns__crowns'),
                 0,
                 output_field=DecimalField()
             )
         ).select_related('shop')
+
+        query = self.request.query_params.get('query', '')
+        category = self.request.query_params.get('category', '')
+        max_price = self.request.query_params.get('max_price', '')
+        min_price = self.request.query_params.get('min_price', '')
+
+        if query:
+            queryset = queryset.filter(Q(title__icontains=query) | Q(description__icontains=query))
+            if self.request.user.is_authenticated:
+                try:
+                    history = HistorySearch.objects.create(user=self.request.user, text=query)
+                    history.save()
+                except Exception:
+                    pass
+        if category:
+            queryset = queryset.filter(category=category)
+        if max_price:
+            queryset = queryset.filter(price__lte=max_price)
+        if min_price:
+            queryset = queryset.filter(price__gte=min_price)
+
+
+        return queryset
+
+
+
+
     
     @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
     def get(self, request, *args, **kwargs):
@@ -493,7 +523,9 @@ class OrderListView(generics.ListAPIView):
         if self.request.user.is_authenticated:
             return Order.objects.filter(user=self.request.user)
         return Order.objects.none()
-
+    @swagger_auto_schema(tags=['Orders'])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 class OrderDetailView(generics.RetrieveAPIView):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -504,12 +536,15 @@ class OrderDetailView(generics.RetrieveAPIView):
         if self.request.user.is_authenticated:
             return Order.objects.filter(user=self.request.user)
         return Order.objects.none()
-
+    @swagger_auto_schema(tags=['Orders'])
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 class CreateOrderView(generics.CreateAPIView):
     serializer_class = CreateOrderSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = Order.objects.none()
     
+    @swagger_auto_schema(tags=['Orders'])
     @transaction.atomic  
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -658,3 +693,48 @@ class MyCommentsListView(generics.ListAPIView):
     @swagger_auto_schema(tags=['User Info'])
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
+
+# --- Search and recomadation
+#
+# class MainPageView(APIView):
+#     serializer_class = MainPageSerializer
+#     permission_classes = [permissions.AllowAny]
+#
+#     @swagger_auto_schema(tags=['MainPage'], responses={200: MainPageSerializer()})
+#     def get(self, request):
+#         categories = Category.objects.all()[:10]
+#         shops = Shop.objects.all().order_by('-review_count')[:10]
+#         products = Product.objects.select_related('category').order_by('-views_count')[:10]
+#         data = {
+#             'popular_categories': categories,
+#             'popular_products': products,
+#             'featured_shops': shops
+#         }
+#
+#         serializer = MainPageSerializer(data=data, context={'request': request})
+#
+# class GlobalSearchView(APIView):
+#     serializer_class = MainPageSerializer
+#     permission_classes = [permissions.AllowAny]
+#     @swagger_auto_schema(tags=['MainPage'], responses={200: MainPageSerializer()})
+#     def get(self, request):
+#         query = request.GET.get('query', '')
+#         if not query:
+#             return Response({'error': 'Query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+#         products = Product.objects.filter(Q(name__icontains=query) | Q(description__icontains=query))[:10]
+#         categories = Category.objects.filter(Q(name__icontains=query))[:10]
+#         shops = Shop.objects.filter(Q(name__icontains=query))[:10]
+#         data = {
+#             'popular_categories': categories,
+#             'popular_products': products,
+#             'featured_shops': shops
+#         }
+#
+#         if request.user.is_authenticated:
+#             search = HistorySearch(user=request.user, query=query)
+#             search.save()
+
+
+

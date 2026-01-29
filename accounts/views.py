@@ -1,4 +1,6 @@
-from rest_framework import status, views, permissions
+import os
+
+from rest_framework import status, views, permissions, generics
 from rest_framework.response import Response
 from django.core.mail import send_mail
 from django.conf import settings
@@ -8,7 +10,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from drf_yasg.utils import swagger_auto_schema
 from .models import VerificationCode, get_expiry_time
-from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer, GetUserInfoSerialzer
+from .serializers import SendCodeSerializer, RegisterSerializer, LoginSerializer, ResetPasswordConfirmSerializer, ResetPasswordEmailSerializer, GetUserInfoSerialzer, UserUpdateSerializer
 from .helpers import send_verification_email, send_welcome_message
 import random
 import secrets
@@ -177,7 +179,7 @@ class TelegrammLinkView(views.APIView):
         token = secrets.token_urlsafe(16)
         user.telegram_token = token
         user.save()
-        bot_username = settings.BOT_USERNAME
+        bot_username = os.getenv('BOT_USERNAME')
         deep_link = f"https://t.me/{bot_username}?start={token}"
         return Response({'link': deep_link}, status=status.HTTP_200_OK)
 
@@ -195,3 +197,18 @@ class GetUserInfoView(views.APIView):
 
 
 
+class UserUpdateView(generics.UpdateAPIView):
+    serializer_class = UserUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['put', 'patch']
+
+    def get_object(self):
+        return self.request.user
+
+    @swagger_auto_schema(tags=['User Info'], consumes=['multipart/form-data'])
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
+
+    @swagger_auto_schema(tags=['User Info'], consumes=['multipart/form-data'])
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)

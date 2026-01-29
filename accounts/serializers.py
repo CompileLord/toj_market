@@ -105,3 +105,13 @@ class GetUserInfoSerialzer(serializers.ModelSerializer):
         read_only_fields = ('id', 'email', 'role', 'telegram_id', 'avatar')
     
 
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'avatar']
+    
+    def validate_avatar(self, value):
+        if value.size > 10 * 1024 * 1024:  # 10MB limit
+            raise serializers.ValidationError("Avatar size should not exceed 10MB.")
+        return value

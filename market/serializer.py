@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.db.models import F, Count
+from django.db import transaction
 from accounts.serializers import GetUserInfoSerialzer
+from decimal import  Decimal
+
 from .models import (
     Category, Product, ImageProduct, CommentProduct, CrownProduct,
     ReviewProduct, Shop, User, HistorySearch, Cart, Order, ReviewShop, OrderItem
@@ -193,7 +196,13 @@ class CartSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         product = attrs.get('product')
         quantity = attrs.get('quantity')
-        if product.quantity < quantity:
+        user = self.context['request'].user
+        
+        existing_quantity = 0
+        if Cart.objects.filter(user=user, product=product).exists():
+            existing_quantity = Cart.objects.get(user=user, product=product).quantity
+            
+        if product.quantity < (quantity + existing_quantity):
             raise serializers.ValidationError(f'Not enough quantity! Available: {product.quantity}')
         return attrs
     
@@ -232,74 +241,88 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ('id', 'user', 'items', 'status', 'status_display', 'created_at', 'total_amount')
         read_only_fields = ('id', 'user', 'items', 'created_at', 'total_amount')
 
+
 class CreateOrderSerializer(serializers.Serializer):
     cart_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
-        help_text="ID products for the bought. If empty we will give you all products from cart"
+        help_text="IDs of products to buy. If empty, all items in cart will be processed."
     )
 
     def validate(self, data):
         user = self.context['request'].user
         cart_ids = data.get('cart_ids')
+        queryset = Cart.objects.filter(user=user).select_related('product')
 
         if cart_ids:
-            cart_items = Cart.objects.filter(user=user, id__in=cart_ids)
-            if len(cart_items) != len(cart_ids):
-                raise serializers.ValidationError("Some products does not found in cart")
+            cart_items = queryset.filter(id__in=cart_ids)
+            if cart_items.count() != len(cart_ids):
+                raise serializers.ValidationError("Some items were not found in your cart.")
         else:
-            cart_items = Cart.objects.filter(user=user)
+            cart_items = queryset
 
         if not cart_items.exists():
-            raise serializers.ValidationError("Cart is empty")
-
+            raise serializers.ValidationError("Your cart is empty.")
         for item in cart_items:
             if item.product.quantity < item.quantity:
                 raise serializers.ValidationError(
-                    f"Product '{item.product.title}' is not available for quantity {item.quantity}" 
+                    f"Product '{item.product.title}' only has {item.product.quantity} units left."
                 )
 
         data['cart_items'] = cart_items
         return data
 
     def create(self, validated_data):
-        request = self.context['request']
+        user = self.context['request'].user
         cart_items = validated_data['cart_items']
-        user = request.user
 
-        total_amount = 0
-        order_items = []
-        for cart_item in cart_items:
-            product = cart_item.product
-            quantity = cart_item.quantity
-            price = product.price
-            total_amount += price * quantity
-            order_items.append(
-                OrderItem(
-                    product=product,
-                    quantity=quantity,
-                    price_at_purchase=price
-                )
+        main_product = cart_items.first().product
+
+        with transaction.atomic():
+            order = Order.objects.create(
+                user=user,
+                product=main_product,
+                total_amount=0
             )
-        first_product = cart_items.first().product if cart_items else None
-        order = Order.objects.create(
-            user=user,
-            product=first_product, 
-            total_amount=total_amount
-        )
-        for order_item in order_items:
-            order_item.order = order
-        
-        OrderItem.objects.bulk_create(order_items)
-        for cart_item in cart_items:
-            product = cart_item.product
-            quantity = cart_item.quantity
-            product.quantity -= quantity
-            product.save()
-        cart_items.delete()
+
+            total_amount = 0
+            order_items_list = []
+
+            for cart_item in cart_items:
+                product = cart_item.product
+                product = Product.objects.select_for_update().get(id=product.id)
+
+                if product.quantity < cart_item.quantity:
+                    raise serializers.ValidationError(f"Not enough stock for {product.title}")
+
+                discount_val = getattr(product, 'discount', 0) or 0
+                discount_pct = Decimal(str(discount_val))
+                
+                unit_price = product.price
+                unit_discount = unit_price * (discount_pct / Decimal('100'))
+                unit_price_after_discount = unit_price - unit_discount
+                
+                item_total = unit_price_after_discount * cart_item.quantity
+                total_amount += item_total
+
+                order_items_list.append(
+                    OrderItem(
+                        order=order,
+                        product=product,
+                        quantity=cart_item.quantity,
+                        price_at_purchase=unit_price_after_discount
+                    )
+                )
+                product.quantity -= cart_item.quantity
+                product.save()
+            OrderItem.objects.bulk_create(order_items_list)
+            order.total_amount = total_amount
+            order.save()
+            from .signals import start_bot_notification
+            transaction.on_commit(lambda: start_bot_notification(order))
+            cart_items.delete()
 
         return order
-
     
 
 
@@ -396,7 +419,16 @@ class CommentSerializer(serializers.ModelSerializer):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
     
-    
+
+
+
+# #--- Search serializer
+#
+# class MainPageSerializer(serializers.Serializer):
+#     popular_categories = CategorySerializer(many=True)
+#     popular_products = ProductSerializer(many=True)
+#     featured_products = ProductSerializer(many=True)
+#     last_added_products = ProductSerializer(many=True)
 
     
 

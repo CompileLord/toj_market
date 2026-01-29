@@ -1,56 +1,94 @@
 import os
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from asgiref.sync import async_to_sync
+import threading
 import asyncio
-from .models import Order
+from django.conf import settings
 
-@receiver(post_save, sender=Order)
-def notify_seller_on_new_order(sender, instance, created, **kwargs):
-    if created:
-        seller = instance.product.shop.seller 
+
+def start_bot_notification(instance):
+    try:
+        order_items = instance.items.select_related('product__shop__seller').prefetch_related('product__images').all()
+        sellers_data = {}
+
+        for item in order_items:
+            seller = item.product.shop.seller
+            if seller.id not in sellers_data:
+                sellers_data[seller.id] = {
+                    'tg_id': seller.telegram_id,
+                    'items': [],
+                    'total': 0,
+                    'photo_path': None
+                }
+            
+            s_data = sellers_data[seller.id]
+            s_data['items'].append(f"{item.product.title} x {item.quantity}")
+            s_data['total'] += item.price_at_purchase * item.quantity
+
+            if not s_data['photo_path'] and item.product.images.exists():
+                image_name = item.product.images.first().image.name
+                s_data['photo_path'] = os.path.join(settings.MEDIA_ROOT, image_name)
+
+        customer_name = instance.user.get_full_name()
+        created_at_str = instance.created_at.strftime('%Y-%m-%d %H:%M')
+        order_id = instance.id
+
+    except Exception as e:
+        print(f"Error preparing bot notification data: {e}")
+        return
+
+    def run_loop():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        if seller and seller.telegram_id:
-            bot_token = os.getenv('BOT_TOKEN')
-            
-            if not bot_token:
-                print("Warning: BOT_TOKEN not set in environment variables")
-                return
-            
-            message = (
-                f"🎉 New Order Received! 🎉\n\n"
-                f"Order ID: {instance.id}\n"
-                f"Product: {instance.product.title}\n"
-                f"Customer: {instance.user.first_name} {instance.user.last_name}\n"
-                f"Total Amount: ${instance.total_amount}\n"
-                f"Status: {instance.get_status_display()}\n\n"
-                f"Order Date: {instance.created_at.strftime('%Y-%m-%d %H:%M')}\n"
-                f"View details on your dashboard."
-            )
-            
-            try:
-                from aiogram import Bot
-                from aiogram.client.default import DefaultBotProperties
-                from aiogram.enums import ParseMode
-                
-                async def send_telegram_message():
-                    bot = Bot(
-                        token=bot_token,
-                        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-                    )
-                    try:
-                        await bot.send_message(
-                            chat_id=seller.telegram_id,
-                            text=message,
-                            parse_mode=None  
-                        )
-                    except Exception as e:
-                        print(f"Failed to send Telegram notification: {e}")
-                    finally:
-                        await bot.session.close()
-                async_to_sync(send_telegram_message)()
-                
-            except ImportError:
-                print("aiogram is not installed. Install with: pip install aiogram")
-            except Exception as e:
-                print(f"Error sending Telegram notification: {e}")
+        tasks = []
+        for s_data in sellers_data.values():
+            if s_data['tg_id']:
+                products_str = "\n".join(s_data['items'])
+                tasks.append(_send_telegram_async(
+                    s_data['tg_id'],
+                    products_str,
+                    customer_name,
+                    s_data['total'],
+                    created_at_str,
+                    order_id,
+                    s_data['photo_path']
+                ))
+        
+        if tasks:
+            loop.run_until_complete(asyncio.gather(*tasks))
+        loop.close()
+
+    threading.Thread(target=run_loop, daemon=True).start()
+
+
+async def _send_telegram_async(seller_tg_id, products_str, customer_name, total_amount, created_at_str, order_id, photo_path):
+    from aiogram import Bot
+    from aiogram.types import FSInputFile
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
+    bot_token = os.getenv('BOT_TOKEN')
+    
+    if not bot_token:
+        print("BOT_TOKEN is missing")
+        return
+
+    bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+    message = (
+        f"🎉 New Order Received! 🎉\n\n"
+        f"Order ID: {order_id}\n"
+        f"Products:\n{products_str}\n"
+        f"Customer: {customer_name}\n"
+        f"Your Earnings: ${total_amount}\n"
+        f"Order Date: {created_at_str}\n"
+    )
+
+    try:
+        if photo_path and os.path.exists(photo_path):
+            await bot.send_photo(chat_id=seller_tg_id, photo=FSInputFile(photo_path), caption=message)
+        else:
+            await bot.send_message(chat_id=seller_tg_id, text=message)
+    except Exception as e:
+        print(f"Bot Sending Error: {e}")
+    finally:
+        await bot.session.close()

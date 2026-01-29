@@ -7,7 +7,7 @@ from .views import (
     OrderListView, OrderDetailView, CreateOrderView,  CommentDestroyView, CommentUpdateView, CommentListView,
     MyCommentsListView, CommentDetailView,
     HistoryUserView, HistoryCreateView, HistoryDestroyView, CrownProductView,
-    CommentsProduct, CommentsToProduct  # Added missing imports
+    CommentsProduct, CommentsToProduct
 )
 
 app_name = 'market'
@@ -52,18 +52,22 @@ urlpatterns = [
     path('order/create/', CreateOrderView.as_view(), name='order-create'),
     path('order/get-by-id/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
     
+    # -- History
     path('history/get-all-items/', HistoryUserView.as_view(), name='history-list'),
     path('history/add-item/', HistoryCreateView.as_view(), name='history-add'),
     path('history/delete-item/<int:pk>/', HistoryDestroyView.as_view(), name='history-delete'),
 
+    # -- Crowns
     path('crowns/add/<int:pk>/', CrownProductView.as_view(), name='crown-add'),
 
+    # -- Comments
     path('comments/products/<int:pk>/', CommentsProduct.as_view(), name='product-comments-list'),
     path('comments/products/<int:pk>/add/', CommentsToProduct.as_view(), name='product-comment-add'),
     path('comments/<int:pk>/delete/', CommentDestroyView.as_view(), name='comment-delete'),
     path('comments/<int:pk>/update/', CommentUpdateView.as_view(), name='comment-update'),
-
     path('comments/product/<int:product_id>/', CommentListView.as_view(), name='comment-list'),
-    # path('comments/product/<int:product_id>/add/', CommentCreateView.as_view(), name='comment-create'),
     path('comments/<int:pk>/detail/', CommentDetailView.as_view(), name='comment-detail'),
+
+
+
 ]
