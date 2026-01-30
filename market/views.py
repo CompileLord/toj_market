@@ -160,15 +160,17 @@ class ShopDetailView(generics.RetrieveAPIView):
         cache_key = f'shop_detail_{pk}'
         data = cache.get(cache_key)
         if not data:
-            serializer = self.get_serializer(shop)
+            serializer = self.get_serializer(instance)
             data = serializer.data
             cache.set(cache_key, data, 60)
-        serializer_reviews = ReviewShopSerializer(
-            context = {'user': request.user, 'shop': shop},
-            data = {'user': request.user.id, 'shop': shop.id}
-        )
-        if serializer_reviews.is_valid():
-            serializer_reviews.save()
+        
+        if request.user.is_authenticated:
+            serializer_reviews = ReviewShopSerializer(
+                context = {'user': request.user, 'shop': instance},
+                data = {'user': request.user.id, 'shop': instance.id}
+            )
+            if serializer_reviews.is_valid():
+                serializer_reviews.save()
         return Response(data)
 
 class ShopCreateView(generics.CreateAPIView):
@@ -192,10 +194,9 @@ class ShopPutView(generics.UpdateAPIView):
     def put(self, request, *args, **kwargs):
         cache.clear()
         user = request.user
-        if self.get_object().seller != user and not user.is_staff:
-            return Response({'detail': 'You do not have permission to update this shop.'},status=status.HTTP_403_FORBIDDEN)
-        serializer= self.get_serializer(data=request.data)
-        serializer.save()
+        instance = self.get_object()
+        if instance.seller != user and not user.is_staff:
+            return Response({'detail': 'You do not have permission to update this shop.'}, status=status.HTTP_403_FORBIDDEN)
         return super().put(request, *args, **kwargs)
             
 
@@ -247,7 +248,9 @@ class ProductListView(generics.ListAPIView):
         return queryset
     @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
     def get(self, request, *args, **kwargs):
-        cache_key = 'product_list'
+        # Cache key should depend on query parameters
+        params = request.query_params.urlencode()
+        cache_key = f'product_list_{params}' if params else 'product_list_all'
         data = cache.get(cache_key)
         if not data:
             serializer = self.get_serializer(self.get_queryset(), many=True)
@@ -259,26 +262,33 @@ class ProductDetailView(generics.RetrieveAPIView):
     serializer_class = ProductDetailSerializer
     queryset = Product.objects.all()
     permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Product.objects.none()
+        return Product.objects.annotate(
+            avg_crowns=Coalesce(
+                Avg('product_crowns__crowns'),
+                0,
+                output_field=DecimalField()
+            )
+        ).select_related('shop', 'category').prefetch_related('comments', 'images')
     
     @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
     def get(self, request, *args, **kwargs):
-        pk = kwargs.get('pk')
-        product = get_object_or_404(Product, pk=pk)
+        instance = self.get_object()
+        pk = instance.pk
         cache_key = f'product_detail_{pk}'
         data = cache.get(cache_key)
         if not data:
-            serializer = self.get_serializer(
-                product,
-                context={'request': request}
-            )
+            serializer = self.get_serializer(instance)
             data = serializer.data
             cache.set(cache_key, data, 60)
 
-
         if request.user.is_authenticated:
             serializer_reviews = ReviewProductSerializer(
-                context = {'user': request.user, 'product': product},
-                data = {'user': request.user.id, 'product': product.id}
+                context = {'user': request.user, 'product': instance},
+                data = {'user': request.user.id, 'product': instance.id}
             )
             if serializer_reviews.is_valid():
                 serializer_reviews.save()
@@ -624,22 +634,12 @@ class CommentListView(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-# class CommentCreateView(generics.CreateAPIView):
-#     serializer_class = CommentSerializer
-#     permission_classes = [permissions.IsAuthenticated]
-#     queryset = CommentProduct.objects.none()
-#     @swagger_auto_schema(tags=['Comments'],consumes=['multipart/form-data'])
-#     def post(self, request, *args, **kwargs):
-#         return super().post(request, *args, **kwargs)
-#     def perform_create(self, serializer):
-#         product_id = self.kwargs.get('product_id')
-#         product = get_object_or_404(Product, id=product_id)
-#         serializer.save(user=self.request.user, product=product)
+
 
 class CommentDetailView(generics.RetrieveAPIView):
     queryset = CommentProduct.objects.all()
     serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     
     @swagger_auto_schema(tags=['Comments'],consumes=['multipart/form-data'])
     def get(self, request, *args, **kwargs):

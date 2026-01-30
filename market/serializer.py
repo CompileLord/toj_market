@@ -155,24 +155,36 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     images = ImageProductSerializer(many=True, read_only=True)
     shop_info = serializers.SerializerMethodField()
     category_info = serializers.SerializerMethodField()
+    avg_crowns = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
 
     class Meta:
         model = Product
         fields = ('id', 'title', 'description', 'price', 'quantity', 'discount', 
                   'created_at', 'shop', 'category', 'views_count', 'comments', 
-                  'images', 'shop_info', 'category_info')
+                  'images', 'shop_info', 'category_info', 'avg_crowns')
         read_only_fields = ('id', 'shop', 'views_count', 'created_at', 
-                           'comments', 'images', 'shop_info', 'category_info')
+                           'comments', 'images', 'shop_info', 'category_info', 'avg_crowns')
     
     def get_shop_info(self, obj):
-        return ShopSerializer(obj.shop).data if obj.shop else None
+        return ShopSerializer(obj.shop, context=self.context).data if obj.shop else None
     
     def get_category_info(self, obj):
+        if not obj.category:
+            return None
+        
+        avatar_url = None
+        if obj.category.avatar:
+            request = self.context.get('request')
+            if request:
+                avatar_url = request.build_absolute_uri(obj.category.avatar.url)
+            else:
+                avatar_url = obj.category.avatar.url
+                
         return {
             'id': obj.category.id,
             'title': obj.category.title,
-            'avatar': obj.category.avatar.url if obj.category.avatar else None
-        } if obj.category else None
+            'avatar': avatar_url
+        }
     
 class HistorySearchSerializer(serializers.ModelSerializer):
 
