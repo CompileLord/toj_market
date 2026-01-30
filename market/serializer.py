@@ -115,7 +115,7 @@ class ProductSerializer(serializers.ModelSerializer):
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(image.image.url)
-            return image.image.url # если request почему-то нет
+            return image.image.url
         return None
 
 

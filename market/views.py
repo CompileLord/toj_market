@@ -216,7 +216,6 @@ class ProductListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Product.objects.none()
-
         queryset = Product.objects.annotate(
             avg_crowns=Coalesce(
                 Avg('product_crowns__crowns'),
@@ -224,7 +223,6 @@ class ProductListView(generics.ListAPIView):
                 output_field=DecimalField()
             )
         ).select_related('shop')
-
         query = self.request.query_params.get('query', '')
         category = self.request.query_params.get('category', '')
         max_price = self.request.query_params.get('max_price', '')
@@ -269,11 +267,9 @@ class ProductDetailView(generics.RetrieveAPIView):
         cache_key = f'product_detail_{pk}'
         data = cache.get(cache_key)
         if not data:
-            # ДОБАВЛЯЕМ КОНТЕКСТ РЕКВЕСТА ЗДЕСЬ
             serializer = self.get_serializer(
-                self.get_queryset(),
-                many=True,
-                context={'request': request}  # <--- ВОТ ЭТО СПАСЕТ ССЫЛКИ
+                product,
+                context={'request': request}
             )
             data = serializer.data
             cache.set(cache_key, data, 60)
