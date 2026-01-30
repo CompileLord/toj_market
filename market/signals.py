@@ -92,3 +92,34 @@ async def _send_telegram_async(seller_tg_id, products_str, customer_name, total_
         print(f"Bot Sending Error: {e}")
     finally:
         await bot.session.close()
+
+# from django.db.models.signals import post_save
+# from django.dispatch import receiver
+# from .models import ImageProduct, ProductImageEmbedding
+# from PIL import Image
+# from sentence_transformers import SentenceTransformer
+# import numpy as np
+#
+# try:
+#     embedding_model = SentenceTransformer('clip-ViT-B-32')
+# except Exception as e:
+#     print(f"Warning: Could not load embedding model: {e}")
+#     embedding_model = None
+#
+# @receiver(post_save, sender=ImageProduct)
+# def create_image_embedding(sender, instance, created, **kwargs):
+#     if created and instance.image and embedding_model:
+#         try:
+#             image_path = instance.image.path
+#             if not os.path.exists(image_path):
+#                  return
+#
+#             img = Image.open(image_path)
+#             embedding = embedding_model.encode(img)
+#
+#             ProductImageEmbedding.objects.create(
+#                 product_image=instance,
+#                 embedding=embedding.tolist()
+#             )
+#         except Exception as e:
+#             print(f"Error creating embedding for image {instance.id}: {e}")

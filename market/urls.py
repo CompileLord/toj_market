@@ -7,7 +7,8 @@ from .views import (
     OrderListView, OrderDetailView, CreateOrderView,  CommentDestroyView, CommentUpdateView, CommentListView,
     MyCommentsListView, CommentDetailView,
     HistoryUserView, HistoryCreateView, HistoryDestroyView, CrownProductView,
-    CommentsProduct, CommentsToProduct
+    CommentsProduct, CommentsToProduct,
+    # AISearchView
 )
 
 app_name = 'market'
@@ -59,6 +60,9 @@ urlpatterns = [
 
     # -- Crowns
     path('crowns/add/<int:pk>/', CrownProductView.as_view(), name='crown-add'),
+
+    # # -- AI Search
+    # path('ai-search/', AISearchView.as_view(), name='ai-search'),
 
     # -- Comments
     path('comments/products/<int:pk>/', CommentsProduct.as_view(), name='product-comments-list'),

@@ -148,3 +148,13 @@ class ReviewShop(models.Model):
 
 
 
+
+# from pgvector.django import VectorField
+#
+# class ProductImageEmbedding(models.Model):
+#     product_image = models.OneToOneField(ImageProduct, on_delete=models.CASCADE, related_name='embedding')
+#     embedding = VectorField(dimensions=512)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#
+#     def __str__(self):
+#         return f"Embedding for {self.product_image.id}"

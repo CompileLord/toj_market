@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 from django.db.models import Avg, Count, DecimalField
 from django.shortcuts import get_object_or_404
@@ -246,11 +247,6 @@ class ProductListView(generics.ListAPIView):
 
 
         return queryset
-
-
-
-
-    
     @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
     def get(self, request, *args, **kwargs):
         cache_key = 'product_list'
@@ -273,11 +269,16 @@ class ProductDetailView(generics.RetrieveAPIView):
         cache_key = f'product_detail_{pk}'
         data = cache.get(cache_key)
         if not data:
-            serializer = self.get_serializer(product)
+            # ДОБАВЛЯЕМ КОНТЕКСТ РЕКВЕСТА ЗДЕСЬ
+            serializer = self.get_serializer(
+                self.get_queryset(),
+                many=True,
+                context={'request': request}  # <--- ВОТ ЭТО СПАСЕТ ССЫЛКИ
+            )
             data = serializer.data
             cache.set(cache_key, data, 60)
-        
-        serializer_reviews = None
+
+
         if request.user.is_authenticated:
             serializer_reviews = ReviewProductSerializer(
                 context = {'user': request.user, 'product': product},
@@ -694,47 +695,57 @@ class MyCommentsListView(generics.ListAPIView):
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-
-
-# --- Search and recomadation
 #
-# class MainPageView(APIView):
-#     serializer_class = MainPageSerializer
-#     permission_classes = [permissions.AllowAny]
+# from rest_framework.throttling import UserRateThrottle
+# from pgvector.django import L2Distance, CosineDistance
 #
-#     @swagger_auto_schema(tags=['MainPage'], responses={200: MainPageSerializer()})
-#     def get(self, request):
-#         categories = Category.objects.all()[:10]
-#         shops = Shop.objects.all().order_by('-review_count')[:10]
-#         products = Product.objects.select_related('category').order_by('-views_count')[:10]
-#         data = {
-#             'popular_categories': categories,
-#             'popular_products': products,
-#             'featured_shops': shops
-#         }
+# class AISearchThrottle(UserRateThrottle):
+#     rate = '3/2m'
 #
-#         serializer = MainPageSerializer(data=data, context={'request': request})
+# class AISearchView(APIView):
+#     permission_classes = [permissions.IsAuthenticated]
+#     throttle_classes = [AISearchThrottle]
 #
-# class GlobalSearchView(APIView):
-#     serializer_class = MainPageSerializer
-#     permission_classes = [permissions.AllowAny]
-#     @swagger_auto_schema(tags=['MainPage'], responses={200: MainPageSerializer()})
-#     def get(self, request):
-#         query = request.GET.get('query', '')
-#         if not query:
-#             return Response({'error': 'Query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
-#         products = Product.objects.filter(Q(name__icontains=query) | Q(description__icontains=query))[:10]
-#         categories = Category.objects.filter(Q(name__icontains=query))[:10]
-#         shops = Shop.objects.filter(Q(name__icontains=query))[:10]
-#         data = {
-#             'popular_categories': categories,
-#             'popular_products': products,
-#             'featured_shops': shops
-#         }
+#     @swagger_auto_schema(
+#         tags=['AI Search'],
+#         operation_description="Search products by text description using AI embeddings.",
+#         request_body=openapi.Schema(
+#             type=openapi.TYPE_OBJECT,
+#             properties={
+#                 'query': openapi.Schema(type=openapi.TYPE_STRING, description='Text description of the product'),
+#             },
+#             required=['query']
+#         ),
+#         responses={200: ProductSerializer(many=True)}
+#     )
+#     def post(self, request):
+#         from .signals import embedding_model
 #
-#         if request.user.is_authenticated:
-#             search = HistorySearch(user=request.user, query=query)
-#             search.save()
-
-
-
+#         query_text = request.data.get('query')
+#         if not query_text:
+#             return Response({'detail': 'Query text is required.'}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         if not embedding_model:
+#              return Response({'detail': 'Search service unavailable (Model not loaded).'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+#
+#         try:
+#             query_embedding = embedding_model.encode(query_text)
+#
+#             closest_embeddings = ProductImageEmbedding.objects.order_by(
+#                 CosineDistance('embedding', query_embedding)
+#             )[:10].select_related('product_image__product')
+#             products = []
+#             seen_product_ids = set()
+#
+#             for emb in closest_embeddings:
+#                 product = emb.product_image.product
+#                 if product.id not in seen_product_ids:
+#                     products.append(product)
+#                     seen_product_ids.add(product.id)
+#
+#             serializer = ProductSerializer(products, many=True)
+#             return Response(serializer.data)
+#
+#         except Exception as e:
+#             print(f"AI Search Error: {e}")
+#             return Response({'detail': 'Error processing search.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
