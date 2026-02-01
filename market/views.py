@@ -137,6 +137,7 @@ class ShopListView(generics.ListAPIView):
                 output_field=DecimalField()
             )
         ).select_related('seller')
+
     
     @swagger_auto_schema(tags=['Shop'], consumes=['multipart/form-data'])  
     def get(self, request, *args, **kwargs):
@@ -160,14 +161,14 @@ class ShopDetailView(generics.RetrieveAPIView):
         cache_key = f'shop_detail_{pk}'
         data = cache.get(cache_key)
         if not data:
-            serializer = self.get_serializer(instance)
+            serializer = self.get_serializer(shop)
             data = serializer.data
             cache.set(cache_key, data, 60)
         
         if request.user.is_authenticated:
             serializer_reviews = ReviewShopSerializer(
-                context = {'user': request.user, 'shop': instance},
-                data = {'user': request.user.id, 'shop': instance.id}
+                context = {'user': request.user, 'shop': shop},
+                data = {'user': request.user.id, 'shop': shop.id}
             )
             if serializer_reviews.is_valid():
                 serializer_reviews.save()
@@ -209,6 +210,25 @@ class ShopDestroyView(generics.DestroyAPIView):
     def delete(self, request, *args, **kwargs):
         cache.clear()
         return super().delete(request, *args, **kwargs)
+    
+
+class GetMyShop(generics.RetrieveAPIView):
+    serializer_class = ShopDetailSerializer
+    permission_classes = [IsOwnerShop]
+
+    @swagger_auto_schema(tags=['Shop'], consumes=['multipart/form-data'])
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        shop = Shop.objects.filter(seller=user).first()
+        if not shop:
+            return Response({'detail': 'You do not have a shop.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(shop)
+        return Response(serializer.data)
+    
+    
+
+
+
 
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductSerializer
@@ -248,7 +268,6 @@ class ProductListView(generics.ListAPIView):
         return queryset
     @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
     def get(self, request, *args, **kwargs):
-        # Cache key should depend on query parameters
         params = request.query_params.urlencode()
         cache_key = f'product_list_{params}' if params else 'product_list_all'
         data = cache.get(cache_key)

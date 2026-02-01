@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     CategoryListView, CategoryDetailView, CategoryPutView, CategoryDestroyView, CategoryCreateView,
-    ShopListView, ShopDetailView, ShopCreateView, ShopPutView, ShopDestroyView,
+    ShopListView, ShopDetailView, ShopCreateView, ShopPutView, ShopDestroyView, GetMyShop,
     ProductListView, ProductCreateView, ProductPutView, ProductDestroyView, ProductDetailView, ProductImageAddView, ProductImageDestroyView,
     ProfileInfoView, CartCreateView, CartListView, CartDetailView, CartDestroyView, CartUpdateView,
     OrderListView, OrderDetailView, CreateOrderView,  CommentDestroyView, CommentUpdateView, CommentListView,
@@ -31,6 +31,8 @@ urlpatterns = [
     path('shops/<int:pk>/update/', ShopPutView.as_view(), name='shop-update'),
     path('shops/<int:pk>/destroy/', ShopDestroyView.as_view(), name='shop-delete'),
     path('shops/create/', ShopCreateView.as_view(), name='shop-create'),
+    path('shops/get-my-shop/', GetMyShop.as_view(), name='get-my-shop'),
+
 
     #  ----- Product api
     path('products/get-all-products/', ProductListView.as_view(), name='product-list'),
