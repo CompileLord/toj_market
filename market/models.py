@@ -30,6 +30,10 @@ class Shop(models.Model):
     review_count = models.IntegerField(default=0)
     is_deleted = models.BooleanField(default=False)
 
+    def delete(self):
+        self.is_deleted = True
+        self.save()
+
 
 
 class Product(models.Model):
@@ -43,6 +47,10 @@ class Product(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='category_products')
     is_deleted = models.BooleanField(default=False)
     views_count = models.IntegerField(default=0)
+
+    def delete(self):
+        self.is_deleted = True
+        self.save()
 
 
 

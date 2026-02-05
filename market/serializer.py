@@ -65,11 +65,11 @@ class ShopDetailSerializer(serializers.ModelSerializer):
         return f'{obj.seller.first_name} {obj.seller.last_name}'.strip()
 
     def get_last_added_product(self, obj):
-        last_product = obj.products.order_by('-created_at').first()
+        last_product = obj.products.filter(is_deleted=False).order_by('-created_at').first()
         return ProductSerializer(last_product).data if last_product else None
 
     def get_most_popular_products(self, obj):
-        most_popular_products = obj.products.annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
+        most_popular_products = obj.products.filter(is_deleted=False).annotate(total_orders=Count('orders')).order_by('-total_orders')[:6]
         return ProductSerializer(most_popular_products, many=True).data
 
     def create(self, validated_data):
@@ -267,7 +267,7 @@ class CreateOrderSerializer(serializers.Serializer):
     def validate(self, data):
         user = self.context['request'].user
         cart_ids = data.get('cart_ids')
-        queryset = Cart.objects.filter(user=user).select_related('product')
+        queryset = Cart.objects.filter(user=user, product__is_deleted=False).select_related('product')
 
         if cart_ids:
             cart_items = queryset.filter(id__in=cart_ids)
@@ -305,7 +305,7 @@ class CreateOrderSerializer(serializers.Serializer):
 
             for cart_item in cart_items:
                 product = cart_item.product
-                product = Product.objects.select_for_update().get(id=product.id)
+                product = Product.objects.select_for_update().get(id=product.id, is_deleted=False)
 
                 if product.quantity < cart_item.quantity:
                     raise serializers.ValidationError(f"Not enough stock for {product.title}")
@@ -418,7 +418,7 @@ class ProfileInfoSerializer(serializers.Serializer):
     
     def get_last_added_cart_items(self, obj):  
         user = self.context['request'].user
-        return CartSerializer(Cart.objects.filter(user=user).order_by('-created_at')[:4], many=True).data
+        return CartSerializer(Cart.objects.filter(user=user, product__is_deleted=False).order_by('-created_at')[:4], many=True).data
 
 
 class CommentSerializer(serializers.ModelSerializer):

@@ -32,7 +32,7 @@ class ShopListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Shop.objects.none()
-        return Shop.objects.annotate(
+        return Shop.objects.filter(is_deleted=False).annotate(
             avg_crowns=Coalesce(
                 Avg('products__product_crowns__crowns'),
                 0,
@@ -68,7 +68,7 @@ class CategoryListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Category.objects.none()
-        return Category.objects.annotate(
+        return Category.objects.filter(is_deleted=False).annotate(
             total_products=Count('category_products', distinct=True),
         )
     
@@ -84,7 +84,7 @@ class CategoryListView(generics.ListAPIView):
 
 class CategoryDetailView(generics.RetrieveAPIView):
     serializer_class = CategorySerializer
-    queryset = Category.objects.all()
+    queryset = Category.objects.filter(is_deleted=False)
     permission_classes = [IsAdmin]
     
     @swagger_auto_schema(tags=['Category'], consumes=['multipart/form-data'])
@@ -130,7 +130,7 @@ class ShopListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Shop.objects.none()
-        return Shop.objects.annotate(
+        return Shop.objects.filter(is_deleted=False).annotate(
             avg_crowns=Coalesce(
                 Avg('products__product_crowns__crowns'),
                 0,
@@ -152,12 +152,12 @@ class ShopListView(generics.ListAPIView):
 class ShopDetailView(generics.RetrieveAPIView):
     serializer_class = ShopDetailSerializer
     permission_classes = [permissions.AllowAny]  
-    queryset = Shop.objects.all()
+    queryset = Shop.objects.filter(is_deleted=False)
     
     @swagger_auto_schema(tags=['Shop'], consumes=['multipart/form-data'])  
     def get(self, request, *args, **kwargs):
         pk = kwargs.get('pk')
-        shop = get_object_or_404(Shop, pk=pk)
+        shop = get_object_or_404(Shop, pk=pk, is_deleted=False)
         cache_key = f'shop_detail_{pk}'
         data = cache.get(cache_key)
         if not data:
@@ -237,7 +237,7 @@ class ProductListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Product.objects.none()
-        queryset = Product.objects.annotate(
+        queryset = Product.objects.filter(is_deleted=False).annotate(
             avg_crowns=Coalesce(
                 Avg('product_crowns__crowns'),
                 0,
@@ -285,7 +285,7 @@ class ProductDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Product.objects.none()
-        return Product.objects.annotate(
+        return Product.objects.filter(is_deleted=False).annotate(
             avg_crowns=Coalesce(
                 Avg('product_crowns__crowns'),
                 0,
@@ -353,7 +353,7 @@ class ProductImageAddView(generics.CreateAPIView):
     @swagger_auto_schema(tags=['Product'], consumes=['multipart/form-data'])
     def post(self, request, *args, **kwargs):
         product_id = self.kwargs.get('pk')
-        product = get_object_or_404(Product, id=product_id)
+        product = get_object_or_404(Product, id=product_id, is_deleted=False)
         if not (request.user.role == 'AD' or request.user.is_staff or product.shop.seller == request.user):
             return Response(
                 {'detail': 'You do not have permission to add images to this product.'},
@@ -412,7 +412,7 @@ class CommentsToProduct(generics.CreateAPIView):
     @swagger_auto_schema(tags=['Comments'], consumes=['multipart/form-data'])
     def post(self, request, *args, **kwargs):
         product_id = self.kwargs.get('pk')
-        product = get_object_or_404(Product, id=product_id)
+        product = get_object_or_404(Product, id=product_id, is_deleted=False)
         
         data = request.data.copy()
         data['product'] = product_id
@@ -457,7 +457,7 @@ class CartListView(generics.ListAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Cart.objects.none()
         if self.request.user.is_authenticated:
-            return Cart.objects.filter(user=self.request.user)
+            return Cart.objects.filter(user=self.request.user, product__is_deleted=False)
         return Cart.objects.none()
     
     @swagger_auto_schema(tags=['Cart'])
@@ -478,7 +478,7 @@ class CartCreateView(generics.CreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        product = get_object_or_404(Product, id=product_id)
+        product = get_object_or_404(Product, id=product_id, is_deleted=False)
         data = request.data.copy()        
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
@@ -493,7 +493,7 @@ class CartDetailView(generics.RetrieveAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Cart.objects.none()
         if self.request.user.is_authenticated:
-            return Cart.objects.filter(user=self.request.user)
+            return Cart.objects.filter(user=self.request.user, product__is_deleted=False)
         return Cart.objects.none()
     
     @swagger_auto_schema(tags=['Cart'])
@@ -508,7 +508,7 @@ class CartDestroyView(generics.DestroyAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Cart.objects.none()
         if self.request.user.is_authenticated:
-            return Cart.objects.filter(user=self.request.user)
+            return Cart.objects.filter(user=self.request.user, product__is_deleted=False)
         return Cart.objects.none()
     
     @swagger_auto_schema(tags=['Cart'])
@@ -528,7 +528,7 @@ class CartUpdateView(generics.UpdateAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Cart.objects.none()
         if self.request.user.is_authenticated:
-            return Cart.objects.filter(user=self.request.user)
+            return Cart.objects.filter(user=self.request.user, product__is_deleted=False)
         return Cart.objects.none()
     
     @swagger_auto_schema(tags=['Cart'])
@@ -632,7 +632,7 @@ class CrownProductView(generics.CreateAPIView):
     
     @swagger_auto_schema(tags=['Crowns'],consumes=['multipart/form-data'])
     def post(self, request, *args, **kwargs):
-        product = get_object_or_404(Product, pk=kwargs.get('pk'))
+        product = get_object_or_404(Product, pk=kwargs.get('pk'), is_deleted=False)
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=request.user, product=product)
