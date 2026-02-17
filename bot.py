@@ -2,9 +2,8 @@ import os
 import django
 from dotenv import load_dotenv
 
-# 1. Настройка окружения Django
 load_dotenv()
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings') # Убедись, что 'server.settings' правильный путь
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'server.settings') 
 django.setup()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
