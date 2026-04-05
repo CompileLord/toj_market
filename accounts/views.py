@@ -49,6 +49,7 @@ class SendCodeView(views.APIView):
             try:
                 send_verification_email(email=email, code=code)
             except Exception as e:
+                print(str(e))
                 return Response({"error": "Failed to send email."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             return Response({"message": "Verification code sent successfully."}, status=status.HTTP_200_OK)

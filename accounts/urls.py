@@ -15,15 +15,15 @@ class SwaggerTokenRefreshView(TokenRefreshView):
 
 
 urlpatterns = [
-    path('api/auth/send-code/', SendCodeView.as_view(), name='send_code'),
-    path('api/auth/register/', RegisterView.as_view(), name='register'),
-    path('api/auth/login/', LoginView.as_view(), name='login'),
+    path('auth/send-code/', SendCodeView.as_view(), name='send_code'),
+    path('auth/register/', RegisterView.as_view(), name='register'),
+    path('auth/login/', LoginView.as_view(), name='login'),
 
-    path('api/auth/send_reset_password_code/', PasswordResetRequestView.as_view(), name='send_confirmation_change_password_code'),
-    path('api/auth/confirm_change_password/', PasswordResetConfirmView.as_view(), name='confirm_chage_password'),
+    path('auth/send_reset_password_code/', PasswordResetRequestView.as_view(), name='send_confirmation_change_password_code'),
+    path('auth/confirm_change_password/', PasswordResetConfirmView.as_view(), name='confirm_chage_password'),
     
-    path('api/auth/token/refresh/', SwaggerTokenRefreshView.as_view(), name='token_refresh'),
-    path('api/auth/telegram-link/', TelegrammLinkView.as_view(), name='telegram_link'),
-    path('api/auth/get_user/', GetUserInfoView.as_view(), name='get_user'),
-    path('api/auth/user_update/', UserUpdateView.as_view(), name='user_update'),
+    path('auth/token/refresh/', SwaggerTokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/telegram-link/', TelegrammLinkView.as_view(), name='telegram_link'),
+    path('auth/get_user/', GetUserInfoView.as_view(), name='get_user'),
+    path('auth/user_update/', UserUpdateView.as_view(), name='user_update'),
 ]
